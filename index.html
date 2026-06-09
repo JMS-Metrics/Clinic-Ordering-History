@@ -212,14 +212,8 @@
     <div class="meta" id="meta">loading…</div>
   </header>
 
-  <label class="drop" id="drop">
-    <span class="icon">⬇</span>
-    <span class="txt">
-      <span class="h" id="dropHead">Drop a Metabase .xlsx export here</span>
-      <span class="s" id="dropSub">…or click to browse. Runs entirely in your browser — no internet, no upload, no install.</span>
-    </span>
-    <span class="pick">Choose file</span>
-    <input type="file" id="fileInput" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+  <label class="drop" id="drop" style="display:none">
+    <input type="file" id="fileInput" accept=".xlsx" />
   </label>
 
   <section class="controls" id="controls"></section>
@@ -1582,7 +1576,6 @@ async function _loadFromSupabase(){
       return;
     }
     applyPayload(payload);
-    setupDropZone();
   }catch(err){ console.error(err); _showLogin("Couldn't load data: "+(err.message||err)); }
 }
 async function _doLogin(){
