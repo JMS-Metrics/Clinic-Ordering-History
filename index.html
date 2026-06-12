@@ -225,10 +225,7 @@
     <button class="btn" id="collapseAll">▾ Collapse to reps</button>
     <button class="btn" id="toggleWeeks">▦ Expand months → weeks</button>
     <button class="btn" id="resetFilters">↺ Reset filters</button>
-    <button class="btn" id="exportDrug" title="Download the current (filtered) pivot as CSV — one row per drug">⬇ Export by drug (CSV)</button>
-    <button class="btn" id="exportClinic" title="Download the current (filtered) pivot as CSV — one row per clinic (drugs combined)">⬇ Export by clinic (CSV)</button>
     <button class="btn" id="exportWorkbook" title="Download a formatted Excel sheet — one row per clinic with a MoM Category column (New, Up/Down %, and 1/2/3+ months inactive)">⬇ Export MoM by clinic (Excel)</button>
-    <button class="btn" id="downloadCopy" title="Save a self-contained HTML file with the data currently loaded baked in">⬇ Download shareable copy</button>
     <div class="spacer"></div>
     <div class="summary" id="summary"></div>
   </div>
@@ -1187,10 +1184,7 @@ document.getElementById("resetFilters").addEventListener("click", () => {
   buildControls(); render();
 });
 
-document.getElementById("exportDrug").addEventListener("click", () => exportCsv("drug"));
-document.getElementById("exportClinic").addEventListener("click", () => exportCsv("clinic"));
 document.getElementById("exportWorkbook").addEventListener("click", exportWorkbook);
-document.getElementById("downloadCopy").addEventListener("click", downloadCopy);
 
 function setupDropZone() {
   const drop = document.getElementById("drop");
