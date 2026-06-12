@@ -265,6 +265,7 @@
       if (has(f.reps) && !f.reps.has(r.rep)) return false;
       if (has(f.clinics) && !f.clinics.has(r.clinic)) return false;
       if (has(f.drugs) && !f.drugs.has(r.drug)) return false;
+      if (has(f.source) && !f.source.has(r.source)) return false;
       if (has(f.recency) && !f.recency.has(r.recency)) return false;
       if (has(f.mom) && !f.mom.has(r.mom)) return false;
       return true;
@@ -450,30 +451,43 @@
     return Array.from(present).sort((a, b) => a - b).map(recencyLabel);
   }
 
-  // ── Month-over-month change ──────────────────────────────────────────────
-  // Per-clinic change in total sales (all drugs) for the latest month vs the
-  // prior month (e.g. May vs April). Each record is tagged with its clinic's
-  // bucket so the normal filter machinery treats it like any other category.
+  // ── Sales change: last 30 days vs the prior 30 days ──────────────────────
+  // Per-clinic change in total sales (all drugs) over a rolling 30-day window
+  // ending at the most recent order date in the data, compared with the 30 days
+  // before that. This works on any day of the month, unlike a calendar-month
+  // comparison. Each record is tagged with its clinic's bucket so the normal
+  // filter machinery treats it like any other category.
   const MOM_ORDER = [
-    "New this month", "Up 50%+", "Up 25–49%", "Up 1–24%",
+    "New (last 30d)", "Up 50%+", "Up 25–49%", "Up 1–24%",
     "Down 0–24%", "Down 25–49%", "Down 50%+",
-    "Stopped this month", "No sales either month",
+    "Stopped (last 30d)", "No sales (60d)",
   ];
 
+  function _dayOrdinal(r) {
+    const s = r.date; if (!s) return null;
+    const y = +s.slice(0, 4), mo = +s.slice(5, 7), dd = +s.slice(8, 10);
+    if (!y || !mo || !dd) return null;
+    return Math.floor(Date.UTC(y, mo - 1, dd) / 86400000);
+  }
+
   function tagMomChange(payload) {
-    const cur = payload.max_period;
-    const prev = cur - 1;
+    // Anchor the window to the latest order date present in the data.
+    let anchor = -Infinity;
+    for (const r of payload.records) { const d = _dayOrdinal(r); if (d !== null && d > anchor) anchor = d; }
+    // Last 30 days: [anchor-29 .. anchor].  Prior 30 days: [anchor-59 .. anchor-30].
+    const curLo = anchor - 29, prevLo = anchor - 59, prevHi = anchor - 30;
     const curT = new Map(), prevT = new Map();
     for (const r of payload.records) {
-      if (r.period === cur) curT.set(r.clinic, (curT.get(r.clinic) || 0) + r.subtotal);
-      else if (r.period === prev) prevT.set(r.clinic, (prevT.get(r.clinic) || 0) + r.subtotal);
+      const d = _dayOrdinal(r); if (d === null) continue;
+      if (d >= curLo && d <= anchor) curT.set(r.clinic, (curT.get(r.clinic) || 0) + r.subtotal);
+      else if (d >= prevLo && d <= prevHi) prevT.set(r.clinic, (prevT.get(r.clinic) || 0) + r.subtotal);
     }
     const labelFor = (clinic) => {
       const p = prevT.get(clinic) || 0;
       const q = curT.get(clinic) || 0;
-      if (p === 0 && q === 0) return "No sales either month";
-      if (p === 0) return "New this month";          // grew from nothing
-      if (q === 0) return "Stopped this month";      // dropped to nothing
+      if (p === 0 && q === 0) return "No sales (60d)";
+      if (p === 0) return "New (last 30d)";          // grew from nothing
+      if (q === 0) return "Stopped (last 30d)";      // dropped to nothing
       const pr = Math.round((q - p) / p * 100);
       if (pr >= 50) return "Up 50%+";
       if (pr >= 25) return "Up 25–49%";
@@ -488,11 +502,11 @@
       r.mom = lab;
       present.add(lab);
     }
-    // "No sales either month" (no orders in the current or prior month) is a
-    // dormant catch-all that isn't useful as a month-over-month bucket, so it's
-    // omitted from the filter options and chart. Those clinics still appear in
-    // the table via the other dimensions.
-    return MOM_ORDER.filter((l) => present.has(l) && l !== "No sales either month");
+    // "No sales (60d)" (no orders in either 30-day window) is a dormant
+    // catch-all that isn't useful as a change bucket, so it's omitted from the
+    // filter options and chart. Those clinics still appear in the table via the
+    // other dimensions.
+    return MOM_ORDER.filter((l) => present.has(l) && l !== "No sales (60d)");
   }
 })(typeof window !== "undefined" ? window : globalThis);
 
@@ -740,6 +754,7 @@
             (sub == null || isNaN(parseFloat(sub)) ? 0 : parseFloat(sub));
 
       var statusCol = ("status" in colIndex) ? cells[colIndex.status] : "";
+      var sourceCol = ("source" in colIndex) ? cells[colIndex.source] : "";
 
       records.push({
         rep: cells[colIndex.sales_rep] || "(no rep)",
@@ -749,6 +764,7 @@
         wkstart: wkstart,
         subtotal: sub,
         status: statusCol || "",
+        source: (sourceCol && String(sourceCol).trim()) || "(no source)",
         date: iso,
       });
       if (minP === null || period < minP) minP = period;
@@ -791,18 +807,19 @@ const DIMS = [
   { key: "reps",    field: "rep",    label: "Sales Rep" },
   { key: "clinics", field: "clinic", label: "Clinic Name" },
   { key: "drugs",   field: "drug",   label: "Drug Name" },
+  { key: "source",  field: "source", label: "Source" },
   { key: "recency", field: "recency", label: "# Mo Since Last Order",
     values: (data) => data.recencyValues || [] },
-  { key: "mom", field: "mom", label: "MoM Sales Change",
+  { key: "mom", field: "mom", label: "30-Day Sales Change",
     values: (data) => data.momValues || [] },
 ];
 
 const state = {
   data: null,
-  filters: { reps: new Set(), clinics: new Set(), drugs: new Set(), recency: new Set(), mom: new Set() },
+  filters: { reps: new Set(), clinics: new Set(), drugs: new Set(), source: new Set(), recency: new Set(), mom: new Set() },
   open: new Set(),        // node ids that are expanded
   expandedMonths: new Set(), // month periods expanded into weeks
-  searches: { reps: "", clinics: "", drugs: "", recency: "", mom: "" },
+  searches: { reps: "", clinics: "", drugs: "", source: "", recency: "", mom: "" },
 };
 
 const fmt = (n) => n ? Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "";
@@ -1438,11 +1455,11 @@ function monthShort(p) { return MONTH_ABBR[p % 12] + "-" + String(Math.floor(p /
 // every category). Formatted as one Excel Table; one row per clinic.
 const MOM_CAT_ORDER = ["New", "Up 50%+", "Up 25–49%", "Up 1–24%", "Down 0–24%", "Down 25–49%", "Down 50%+", "1 Mo", "2+ Mo"];
 const MOM_TO_CAT = {
-  "New this month": "New", "Up 50%+": "Up 50%+", "Up 25–49%": "Up 25–49%", "Up 1–24%": "Up 1–24%",
+  "New (last 30d)": "New", "Up 50%+": "Up 50%+", "Up 25–49%": "Up 25–49%", "Up 1–24%": "Up 1–24%",
   "Down 0–24%": "Down 0–24%", "Down 25–49%": "Down 25–49%", "Down 50%+": "Down 50%+",
 };
 function clinicCategory(mom, recency) {
-  if (recency === "0 (ordered this month)") return MOM_TO_CAT[mom] || mom;
+  if (recency === "0 (ordered this month)") return MOM_TO_CAT[mom] || "1 Mo";
   if (recency === "1 Month") return "1 Mo";
   return "2+ Mo"; // last ordered more than a month ago
 }
@@ -1451,6 +1468,7 @@ function exportWorkbook() {
   if (!state.data) { alert("No data is loaded yet."); return; }
   const base = Pivot.applyFilters(state.data.records, {
     reps: state.filters.reps, clinics: state.filters.clinics, drugs: state.filters.drugs,
+    source: state.filters.source,
   });
   const min = state.data.min_period, max = state.data.max_period;
   const months = []; for (let p = min; p <= max; p++) months.push(p);
@@ -1539,8 +1557,9 @@ function _recFromRow(r){
   const t=Date.UTC(y,mo-1,dd), dow=new Date(t).getUTCDay();
   const wkstart=Math.floor(t/86400000)-(dow===0?6:dow-1);
   let sub=r.subtotal; sub=(typeof sub==="number"&&isFinite(sub))?sub:(sub==null||isNaN(parseFloat(sub))?0:parseFloat(sub));
+  const src=(r.source!=null&&String(r.source).trim())?String(r.source).trim():"(no source)";
   return { rep:r.sales_rep||"(no rep)", clinic:r.clinic_name||"(no clinic)", drug:r.drug_name||"(no drug)",
-           period, wkstart, subtotal:sub, status:r.status||"", date:iso };
+           period, wkstart, subtotal:sub, status:r.status||"", source:src, date:iso };
 }
 function _payloadFromRows(rows){
   const records=[]; let minP=null,maxP=null;
@@ -1550,11 +1569,17 @@ function _payloadFromRows(rows){
   return { generated:new Date().toISOString(), source:"Supabase", sheet:"orders", min_period:minP, max_period:maxP, period_labels:labels, records };
 }
 async function _fetchAllOrders(){
-  const cols="order_date,sales_rep,clinic_name,drug_name,subtotal";
+  const withSrc = "order_date,sales_rep,clinic_name,drug_name,subtotal,source";
+  const noSrc   = "order_date,sales_rep,clinic_name,drug_name,subtotal";
+  let cols = withSrc;
   const size=1000; let from=0; const all=[];
   for(;;){
     const { data, error } = await sb.from("orders").select(cols).range(from, from+size-1);
-    if(error) throw error;
+    if(error){
+      // If the table has no "source" column, retry the whole fetch without it.
+      if(cols===withSrc){ cols=noSrc; from=0; all.length=0; continue; }
+      throw error;
+    }
     all.push(...data);
     if(data.length<size) break;
     from+=size;
