@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clinic Streak</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --ink: #14110d;
+    --paper: #f4f0e6;
+    --panel: #fbf8f0;
+    --line: #d8d0bd;
+    --line-soft: #e7e0cf;
+    --accent: #b4451f;
+    --accent-soft: #f0d9cb;
+    --rep: #2a2620;
+    --clinic: #5a4a2f;
+    --drug: #8a7a55;
+    --pos: #355e3b;
+    --muted: #8c8472;
+    --shadow: 0 1px 0 rgba(20,17,13,.04), 0 8px 28px -18px rgba(20,17,13,.4);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(120% 120% at 100% 0%, #fbf8ef 0%, var(--paper) 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 28px 26px 80px; }
+
+  header.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 14px; }
+  .brand { display: flex; flex-direction: column; gap: 2px; }
+  .brand h1 {
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600; font-size: 38px; line-height: .95; margin: 0;
+    letter-spacing: -.01em;
+  }
+  .brand .sub { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.6; }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 12px; margin: 22px 0 18px; }
+
+  .filter {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 13px 13px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  }
+  .filter .lbl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .filter .lbl .name { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .filter .lbl .count { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .filter input.search {
+    width: 100%; border: 1px solid var(--line); background: #fff;
+    border-radius: 7px; padding: 7px 9px; font: inherit; font-size: 12.5px;
+    margin-bottom: 8px; outline: none; box-sizing: border-box;
+  }
+  .filter input.search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .optbox { overflow-y: auto; overflow-x: hidden; max-height: 168px; border-top: 1px dashed var(--line-soft); padding-top: 7px; min-width: 0; }
+  .opt { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 6px; cursor: pointer; font-size: 12.5px; min-width: 0; }
+  .opt:hover { background: var(--accent-soft); }
+  .opt input { accent-color: var(--accent); width: 14px; height: 14px; flex: none; }
+  .opt .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+  .filter .actions { display: flex; gap: 10px; margin-top: 8px; }
+  .filter .actions button {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; background: none; border: none; color: var(--muted);
+    cursor: pointer; padding: 2px 0; border-bottom: 1px solid transparent;
+  }
+  .filter .actions button:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+  .toolbar .btn {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .06em;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 12px; cursor: pointer; color: var(--ink);
+  }
+  .toolbar .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .summary { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--muted); }
+  .toolbar .summary b { color: var(--ink); }
+
+  /* Pie/donut charts */
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; margin: 0 0 20px; }
+  .chart-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+  .chart-card .ttl { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .chart-card .cap { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .chart-card .pie { display: block; width: 130px; height: 130px; margin: 12px auto 10px; }
+  .legend { display: flex; flex-direction: column; gap: 3px; }
+  .legend .lg { display: flex; align-items: center; gap: 7px; font-size: 11.5px; line-height: 1.3; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .legend .lb { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend .vl { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--muted); flex: none; }
+
+  .tablewrap { border: 1px solid var(--line); border-radius: 12px; overflow: auto; background: var(--panel); box-shadow: var(--shadow); max-height: calc(100vh - 120px); }
+  table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+  thead th {
+    position: sticky; top: 0; z-index: 3; background: var(--ink); color: var(--paper);
+    font-family: "IBM Plex Mono", monospace; font-weight: 500; font-size: 11px;
+    padding: 9px 8px; text-align: right; white-space: nowrap; letter-spacing: .03em;
+  }
+  thead th.rowhead { text-align: left; left: 0; z-index: 4; min-width: 320px; }
+  thead th.gt { color: #ffd9b0; border-left: 2px solid var(--accent); }
+  thead th.mcol.clk { cursor: pointer; }
+  thead th.mcol .cwirl { display: inline-flex; width: 11px; justify-content: center; margin-right: 4px; color: #ffd9b0; font-size: 9px; transition: transform .12s; }
+  thead th.mcol .cwirl.closed { transform: rotate(-90deg); }
+  thead th.mcol.exp { border-left: 1px solid var(--accent); }
+  thead th.wk { background: #3a342b; color: #e8dcc2; font-weight: 400; font-size: 10px; letter-spacing: .02em; }
+  tbody td.wk { background: #fbf8ef; color: var(--drug); font-size: 11.5px; }
+
+  tbody td { padding: 5px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; }
+  tbody td.rowhead {
+    position: sticky; left: 0; z-index: 2; text-align: left;
+    background: var(--panel); border-right: 1px solid var(--line);
+    max-width: 360px;
+  }
+  tbody td.gt { font-weight: 600; border-left: 2px solid var(--line); }
+  td .z { color: #cfc7b3; }
+
+  .r-rep   td { background: #efe9da; }
+  .r-rep   td.rowhead { background: #efe9da; }
+  .r-clinic td.rowhead { padding-left: 26px; }
+  .r-drug   td.rowhead { padding-left: 48px; color: var(--drug); }
+  .r-clinic td.rowhead { color: var(--clinic); }
+  .r-rep    td.rowhead { color: var(--rep); }
+
+  .twirl { display: inline-flex; width: 15px; justify-content: center; margin-right: 6px; cursor: pointer; color: var(--accent); font-size: 10px; user-select: none; transition: transform .12s; }
+  .twirl.closed { transform: rotate(-90deg); }
+  .twirl.leaf { color: var(--line); cursor: default; }
+  .rowname { font-weight: 500; }
+  .r-rep .rowname { font-family: "Fraunces", serif; font-weight: 600; font-size: 14.5px; }
+  .r-drug .rowname { font-weight: 400; }
+  .pos { color: var(--pos); }
+  .grand-row td { background: var(--ink); color: var(--paper); font-weight: 600; position: sticky; bottom: 0; z-index: 3; }
+  .grand-row td.rowhead { background: var(--ink); color: var(--paper); z-index: 4; }
+
+  .loading, .empty { padding: 60px; text-align: center; font-family: "IBM Plex Mono", monospace; color: var(--muted); }
+  .chip { display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:10.5px; background:var(--accent-soft); color:var(--accent); border-radius:20px; padding:2px 9px; margin-left:6px;}
+
+  /* Drop zone */
+  .drop {
+    margin: 20px 0 4px; border: 2px dashed var(--line); border-radius: 12px;
+    background: var(--panel); padding: 18px 20px; display: flex; align-items: center;
+    gap: 16px; transition: border-color .15s, background .15s; cursor: pointer;
+  }
+  .drop:hover { border-color: var(--accent); }
+  .drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
+  .drop .icon { font-size: 26px; line-height: 1; color: var(--accent); }
+  .drop .txt { flex: 1; }
+  .drop .txt .h { font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .04em; color: var(--ink); }
+  .drop .txt .s { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .drop .pick {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .06em;
+    background: var(--ink); color: var(--paper); border: none; border-radius: 8px;
+    padding: 9px 14px; cursor: pointer;
+  }
+  .drop .pick:hover { background: var(--accent); }
+  .drop.ok { border-style: solid; border-color: var(--pos); }
+  .drop.ok .icon { color: var(--pos); }
+  .drop.err { border-style: solid; border-color: var(--accent); }
+  .drop input[type=file] { display: none; }
+  /* login gate */
+  #login-gate{position:fixed;inset:0;display:grid;place-items:center;padding:24px;z-index:50;
+    background:radial-gradient(120% 120% at 100% 0%, #fbf8ef 0%, var(--paper) 55%), var(--paper);}
+  .login-card{width:100%;max-width:360px;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:30px 28px;box-shadow:var(--shadow);}
+  .login-logo{width:42px;height:42px;border-radius:11px;background:var(--accent);display:grid;place-items:center;
+    font-family:"Fraunces",serif;font-weight:600;font-size:18px;color:#fff;margin-bottom:14px;}
+  .login-card h1{font-family:"Fraunces",serif;font-weight:600;font-size:24px;margin:0 0 4px;color:var(--ink);}
+  .login-card p{color:var(--muted);font-size:13px;margin:0 0 22px;}
+  .login-card label{display:block;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px;}
+  .login-card input{width:100%;box-sizing:border-box;background:#fff;border:1px solid var(--line);border-radius:9px;
+    padding:11px 13px;color:var(--ink);font-family:"IBM Plex Sans",sans-serif;font-size:14px;margin-bottom:14px;}
+  .login-card input:focus{outline:none;border-color:var(--accent);}
+  .login-card button{width:100%;border:none;border-radius:9px;padding:12px;cursor:pointer;font-weight:600;font-size:14px;
+    color:#fff;background:var(--accent);font-family:"IBM Plex Sans",sans-serif;}
+  .login-card button:disabled{opacity:.6;cursor:default;}
+  .login-err{color:var(--accent);font-size:12.5px;margin-top:12px;min-height:16px;}
+  .signout{font-family:"IBM Plex Sans",sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 11px;}
+  .signout:hover{color:var(--ink);}
+</style>
+</head>
+<body>
+<div id="login-gate">
+  <div class="login-card">
+    <div class="login-logo">CS</div>
+    <h1>Clinic&nbsp;Streak</h1>
+    <p>Sign in to view the report.</p>
+    <label for="lg-email">Email</label>
+    <input id="lg-email" type="email" autocomplete="username" placeholder="you@company.com" />
+    <label for="lg-pw">Password</label>
+    <input id="lg-pw" type="password" autocomplete="current-password" placeholder="••••••••" />
+    <button id="lg-btn">Sign in</button>
+    <div class="login-err" id="lg-err"></div>
+  </div>
+</div>
+<div class="wrap" id="app" style="display:none">
+  <header class="top">
+    <div class="brand">
+      <h1>Clinic&nbsp;Streak</h1>
+      <span class="sub">Monthly order subtotals · Rep ▸ Clinic ▸ Drug</span>
+    </div>
+    <div class="meta" id="meta">loading…</div>
+  </header>
+
+  <label class="drop" id="drop" style="display:none">
+    <input type="file" id="fileInput" accept=".xlsx" />
+  </label>
+
+  <section class="controls" id="controls"></section>
+
+  <section class="charts" id="charts"></section>
+
+  <div class="toolbar">
+    <button class="btn" id="expandAll">▸ Expand all</button>
+    <button class="btn" id="collapseAll">▾ Collapse to reps</button>
+    <button class="btn" id="toggleWeeks">▦ Expand months → weeks</button>
+    <button class="btn" id="resetFilters">↺ Reset filters</button>
+    <button class="btn" id="exportWorkbook" title="Download a formatted Excel sheet — one row per clinic with a MoM Category column (New, Up/Down %, and 1/2/3+ months inactive)">⬇ Export MoM by clinic (Excel)</button>
+    <div class="spacer"></div>
+    <div class="summary" id="summary"></div>
+  </div>
+
+  <div class="tablewrap">
+    <div class="loading" id="loading">Loading data…</div>
+    <table id="table" hidden></table>
+  </div>
+</div>
+
+<script>
+/* pivot.js — aggregation engine for the Clinic Streak dashboard.
+ *
+ * Builds the Metabase-style pivot: rows grouped Rep > Clinic > Drug, columns =
+ * order months, values = sum of subtotal. Each record carries a `period`
+ * (a month ordinal = year*12 + monthIndex) assigned by the reader; this module
+ * filters, aggregates into month columns, and sorts by recency.
+ */
+
+(function (global) {
+  "use strict";
+
+  function unique(records, key) {
+    const set = new Set();
+    for (const r of records) set.add(r[key]);
+    return Array.from(set).sort((a, b) =>
+      String(a).localeCompare(String(b))
+    );
+  }
+
+  // filters: { reps:Set|null, clinics:Set|null, drugs:Set|null }
+  // null/empty set => no constraint on that dimension.
+  function applyFilters(records, filters) {
+    const f = filters || {};
+    const has = (s) => s && s.size > 0;
+    return records.filter((r) => {
+      if (has(f.reps) && !f.reps.has(r.rep)) return false;
+      if (has(f.am) && !f.am.has(r.accountManager)) return false;
+      if (has(f.clinics) && !f.clinics.has(r.clinic)) return false;
+      if (has(f.drugs) && !f.drugs.has(r.drug)) return false;
+      if (has(f.source) && !f.source.has(r.source)) return false;
+      if (has(f.recency) && !f.recency.has(r.recency)) return false;
+      if (has(f.mom) && !f.mom.has(r.mom)) return false;
+      return true;
+    });
+  }
+
+  // Build the nested pivot: Rep -> Clinic -> Drug, each holding monthly sums
+  // (cols) and, alongside, weekly sums per month (wcols) so a month column can
+  // be expanded into its weeks. Weeks are real Monday–Sunday calendar weeks,
+  // keyed by the ordinal day-number of their Monday (`wkstart`); a week that
+  // straddles a month boundary contributes to each month only the orders dated
+  // in that month, so a month's total always equals the sum of its week cells.
+  // range: {min, max} inclusive month ordinals.
+  function buildPivot(records, range) {
+    const min = range.min;
+    const max = range.max;
+    const nCols = max - min + 1;
+    const blank = () => new Array(nCols).fill(0);
+
+    const reps = new Map(); // repName -> repNode
+    const weeksSeen = Array.from({ length: nCols }, () => new Set());
+
+    function ensure(map, name, makeNode) {
+      let node = map.get(name);
+      if (!node) {
+        node = makeNode();
+        map.set(name, node);
+      }
+      return node;
+    }
+
+    // node.wcols[col] is an object map { wkstart -> sum } for that month.
+    function addWeek(node, col, wk, v) {
+      if (!node.wcols[col]) node.wcols[col] = {};
+      node.wcols[col][wk] = (node.wcols[col][wk] || 0) + v;
+    }
+
+    for (const rec of records) {
+      const col = rec.period - min;
+      if (col < 0 || col >= nCols) continue;
+      const wk = rec.wkstart | 0; // Monday ordinal of this order's week
+
+      const rep = ensure(reps, rec.rep, () => ({
+        name: rec.rep,
+        cols: blank(),
+        wcols: new Array(nCols),
+        total: 0,
+        clinics: new Map(),
+      }));
+      const clinic = ensure(rep.clinics, rec.clinic, () => ({
+        name: rec.clinic,
+        cols: blank(),
+        wcols: new Array(nCols),
+        total: 0,
+        drugs: new Map(),
+      }));
+      const drug = ensure(clinic.drugs, rec.drug, () => ({
+        name: rec.drug,
+        cols: blank(),
+        wcols: new Array(nCols),
+        total: 0,
+      }));
+
+      const v = rec.subtotal || 0;
+      rep.cols[col] += v; rep.total += v; addWeek(rep, col, wk, v);
+      clinic.cols[col] += v; clinic.total += v; addWeek(clinic, col, wk, v);
+      drug.cols[col] += v; drug.total += v; addWeek(drug, col, wk, v);
+      if (v) weeksSeen[col].add(wk);
+    }
+
+    // Grand totals per month + weekly + overall.
+    const grandCols = blank();
+    const grandWcols = new Array(nCols);
+    let grandTotal = 0;
+    for (const rep of reps.values()) {
+      for (let i = 0; i < nCols; i++) {
+        grandCols[i] += rep.cols[i];
+        if (rep.wcols[i]) {
+          if (!grandWcols[i]) grandWcols[i] = {};
+          for (const wk in rep.wcols[i])
+            grandWcols[i][wk] = (grandWcols[i][wk] || 0) + rep.wcols[i][wk];
+        }
+      }
+      grandTotal += rep.total;
+    }
+
+    // Which week-starts actually have data in each month (so expanding a month
+    // shows only real weeks), sorted chronologically.
+    const weeksPresent = weeksSeen.map((s) =>
+      Array.from(s).sort((a, b) => a - b));
+
+    // Sort by monthly subtotal, comparing the latest month first and walking
+    // back toward the first month. Higher subtotal in a more recent month
+    // ranks higher, so rows whose most recent order is more recent float to the
+    // top (i.e. fewer months since their last order). Tie-break: name.
+    const byRecent = (a, b) => {
+      for (let i = nCols - 1; i >= 0; i--) {
+        const av = a.cols[i], bv = b.cols[i];
+        if (av !== bv) return bv - av; // descending
+      }
+      return a.name.localeCompare(b.name);
+    };
+
+    const repList = Array.from(reps.values()).sort(byRecent);
+    for (const rep of repList) {
+      rep.clinics = Array.from(rep.clinics.values()).sort(byRecent);
+      for (const clinic of rep.clinics) {
+        clinic.drugs = Array.from(clinic.drugs.values()).sort(byRecent);
+      }
+    }
+
+    return {
+      min,
+      max,
+      nCols,
+      reps: repList,
+      grandCols,
+      grandWcols,
+      weeksPresent,
+      grandTotal,
+    };
+  }
+
+  global.Pivot = { unique, applyFilters, buildPivot, tagRecency, recencyLabel,
+                   mondayOrdinal, weekRangeLabel, normalizeWeeks, tagMomChange };
+
+  // ── Weeks ──────────────────────────────────────────────────────────────
+  // Orders are grouped into real Monday–Sunday calendar weeks (matching the
+  // Metabase "Order Week" field). A week is identified by `wkstart`, the
+  // ordinal day-number (days since 1970-01-01, UTC) of its Monday.
+  function mondayOrdinal(iso) {
+    const y = +iso.slice(0, 4), m = +iso.slice(5, 7), d = +iso.slice(8, 10);
+    const t = Date.UTC(y, m - 1, d);
+    const dow = new Date(t).getUTCDay();       // 0=Sun … 6=Sat
+    const offset = (dow === 0 ? 6 : dow - 1);  // days back to Monday
+    return Math.floor(t / 86400000) - offset;
+  }
+
+  // Format a wkstart ordinal as its Monday–Sunday date range, e.g. "5/25–5/31".
+  function weekRangeLabel(wkstart) {
+    const mon = new Date(wkstart * 86400000);
+    const sun = new Date((wkstart + 6) * 86400000);
+    return (mon.getUTCMonth() + 1) + "/" + mon.getUTCDate() + "–" +
+           (sun.getUTCMonth() + 1) + "/" + sun.getUTCDate();
+  }
+
+  // Ensure every record has a `wkstart` (Monday ordinal). Embedded/aggregated
+  // data already carries it; raw data (with a `date`) gets it derived.
+  function normalizeWeeks(payload) {
+    for (const r of payload.records) {
+      if (typeof r.wkstart !== "number") {
+        r.wkstart = r.date ? mondayOrdinal(r.date) : 0;
+      }
+    }
+  }
+
+  // ── Recency ────────────────────────────────────────────────────────────
+  // "Months since last order" is a per-clinic property: how many whole months
+  // back the clinic's most recent order is, measured from the latest month in
+  // the data. 0 = ordered in the latest month, 1 = last ordered the month
+  // before, and so on. Each record is tagged with its clinic's bucket so the
+  // normal filter machinery can treat it like any other category.
+  function recencyLabel(n) {
+    if (n === 0) return "0 (ordered this month)";
+    if (n === 1) return "1 Month";
+    return n + " Months";
+  }
+
+  function tagRecency(payload) {
+    const max = payload.max_period;
+    const lastByClinic = new Map();
+    for (const r of payload.records) {
+      const cur = lastByClinic.get(r.clinic);
+      if (cur === undefined || r.period > cur) lastByClinic.set(r.clinic, r.period);
+    }
+    const present = new Set();
+    for (const r of payload.records) {
+      const n = max - lastByClinic.get(r.clinic);
+      r.recency = recencyLabel(n);
+      present.add(n);
+    }
+    // Numeric-ascending label list, for building the filter options in order.
+    return Array.from(present).sort((a, b) => a - b).map(recencyLabel);
+  }
+
+  // ── Sales change: last 30 days vs the prior 30 days ──────────────────────
+  // Per-clinic change in total sales (all drugs) over a rolling 30-day window
+  // ending at the most recent order date in the data, compared with the 30 days
+  // before that. This works on any day of the month, unlike a calendar-month
+  // comparison. Each record is tagged with its clinic's bucket so the normal
+  // filter machinery treats it like any other category.
+  const MOM_ORDER = [
+    "New (last 30d)", "Up 50%+", "Up 25–49%", "Up 1–24%",
+    "Down 0–24%", "Down 25–49%", "Down 50%+",
+    "Stopped (last 30d)", "No sales (60d)",
+  ];
+
+  function _dayOrdinal(r) {
+    const s = r.date; if (!s) return null;
+    const y = +s.slice(0, 4), mo = +s.slice(5, 7), dd = +s.slice(8, 10);
+    if (!y || !mo || !dd) return null;
+    return Math.floor(Date.UTC(y, mo - 1, dd) / 86400000);
+  }
+
+  function tagMomChange(payload) {
+    // Anchor the window to the latest order date present in the data.
+    let anchor = -Infinity;
+    for (const r of payload.records) { const d = _dayOrdinal(r); if (d !== null && d > anchor) anchor = d; }
+    // Last 30 days: [anchor-29 .. anchor].  Prior 30 days: [anchor-59 .. anchor-30].
+    const curLo = anchor - 29, prevLo = anchor - 59, prevHi = anchor - 30;
+    const curT = new Map(), prevT = new Map();
+    for (const r of payload.records) {
+      const d = _dayOrdinal(r); if (d === null) continue;
+      if (d >= curLo && d <= anchor) curT.set(r.clinic, (curT.get(r.clinic) || 0) + r.subtotal);
+      else if (d >= prevLo && d <= prevHi) prevT.set(r.clinic, (prevT.get(r.clinic) || 0) + r.subtotal);
+    }
+    const labelFor = (clinic) => {
+      const p = prevT.get(clinic) || 0;
+      const q = curT.get(clinic) || 0;
+      if (p === 0 && q === 0) return "No sales (60d)";
+      if (p === 0) return "New (last 30d)";          // grew from nothing
+      if (q === 0) return "Stopped (last 30d)";      // dropped to nothing
+      const pr = Math.round((q - p) / p * 100);
+      if (pr >= 50) return "Up 50%+";
+      if (pr >= 25) return "Up 25–49%";
+      if (pr >= 1) return "Up 1–24%";
+      if (pr >= -24) return "Down 0–24%";            // includes flat (0%)
+      if (pr >= -49) return "Down 25–49%";
+      return "Down 50%+";
+    };
+    const present = new Set();
+    for (const r of payload.records) {
+      const lab = labelFor(r.clinic);
+      r.mom = lab;
+      present.add(lab);
+    }
+    // "No sales (60d)" (no orders in either 30-day window) is a dormant
+    // catch-all that isn't useful as a change bucket, so it's omitted from the
+    // filter options and chart. Those clinics still appear in the table via the
+    // other dimensions.
+    return MOM_ORDER.filter((l) => present.has(l) && l !== "No sales (60d)");
+  }
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+/* xlsx-lite.js — zero-dependency .xlsx reader for the Clinic Streak dashboard.
+ *
+ * Reads a Metabase export entirely in the browser with NO external library:
+ *   1. Parse the ZIP central directory (an .xlsx is a ZIP of XML parts).
+ *   2. Inflate the parts we need with the built-in DecompressionStream.
+ *   3. Pull cells from the `Query result` worksheet + the shared-strings table.
+ *   4. Map columns by header name and emit the same record shape as data.json.
+ *
+ * Works from a plain file:// double-click — no server, no CDN, no Python.
+ * Requires a browser with DecompressionStream + async/await (all current
+ * Chrome/Edge/Firefox/Safari). Exposes window.XlsxLite.read(arrayBuffer, name).
+ */
+(function (global) {
+  "use strict";
+
+  // Order rows are bucketed by calendar month (derived from order_date).
+  var NEEDED = ["order_date", "drug_name", "clinic_name", "sales_rep", "subtotal", "status"];
+
+  // ---- ZIP parsing -------------------------------------------------------
+  // Minimal reader: find End-Of-Central-Directory, walk central directory,
+  // then read each local file header to locate the compressed bytes.
+
+  function u16(dv, o) { return dv.getUint16(o, true); }
+  function u32(dv, o) { return dv.getUint32(o, true); }
+
+  function findEOCD(dv) {
+    // EOCD signature 0x06054b50, scan backwards (max comment 65535).
+    var len = dv.byteLength;
+    var min = Math.max(0, len - 65557);
+    for (var i = len - 22; i >= min; i--) {
+      if (u32(dv, i) === 0x06054b50) return i;
+    }
+    throw new Error("Not a valid .xlsx (no ZIP end record found).");
+  }
+
+  function listEntries(buf) {
+    var dv = new DataView(buf);
+    var eocd = findEOCD(dv);
+    var count = u16(dv, eocd + 10);
+    var cdOffset = u32(dv, eocd + 16);
+    var entries = {};
+    var p = cdOffset;
+    for (var n = 0; n < count; n++) {
+      if (u32(dv, p) !== 0x02014b50) break; // central dir header sig
+      var method = u16(dv, p + 10);
+      var compSize = u32(dv, p + 20);
+      var nameLen = u16(dv, p + 28);
+      var extraLen = u16(dv, p + 30);
+      var commentLen = u16(dv, p + 32);
+      var localHdr = u32(dv, p + 42);
+      var name = utf8(new Uint8Array(buf, p + 46, nameLen));
+      entries[name] = { method: method, compSize: compSize, localHdr: localHdr };
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return { buf: buf, entries: entries };
+  }
+
+  function rawBytes(zip, name) {
+    var e = zip.entries[name];
+    if (!e) return null;
+    var dv = new DataView(zip.buf);
+    // Local file header: name + extra lengths live at +26/+28.
+    var lh = e.localHdr;
+    if (u32(dv, lh) !== 0x04034b50) throw new Error("Bad local header for " + name);
+    var nameLen = u16(dv, lh + 26);
+    var extraLen = u16(dv, lh + 28);
+    var start = lh + 30 + nameLen + extraLen;
+    return { method: e.method, bytes: new Uint8Array(zip.buf, start, e.compSize) };
+  }
+
+  function utf8(bytes) {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+
+  async function inflate(part) {
+    if (part.method === 0) return part.bytes; // stored, no compression
+    if (part.method !== 8) throw new Error("Unsupported ZIP method " + part.method);
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("Your browser lacks DecompressionStream; please use a current Chrome, Edge, Firefox, or Safari.");
+    }
+    var ds = new DecompressionStream("deflate-raw");
+    var stream = new Response(part.bytes).body.pipeThrough(ds);
+    var ab = await new Response(stream).arrayBuffer();
+    return new Uint8Array(ab);
+  }
+
+  async function readText(zip, name) {
+    var part = rawBytes(zip, name);
+    if (!part) return null;
+    return utf8(await inflate(part));
+  }
+
+  // ---- XML helpers -------------------------------------------------------
+
+  function decodeEntities(s) {
+    if (s.indexOf("&") === -1) return s;
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+            .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+            .replace(/&#(\d+);/g, function (_, d) { return String.fromCharCode(+d); })
+            .replace(/&#x([0-9a-fA-F]+);/g, function (_, h) { return String.fromCharCode(parseInt(h, 16)); })
+            .replace(/&amp;/g, "&");
+  }
+
+  // Shared strings: each <si> may hold <t>..</t> or multiple <r><t>..</t></r>.
+  function parseSharedStrings(xml) {
+    var out = [];
+    if (!xml) return out;
+    var siRe = /<si>([\s\S]*?)<\/si>/g, m;
+    var tRe = /<t[^>]*>([\s\S]*?)<\/t>/g;
+    while ((m = siRe.exec(xml))) {
+      var inner = m[1], t, parts = "";
+      while ((t = tRe.exec(inner))) parts += t[1];
+      tRe.lastIndex = 0;
+      out.push(decodeEntities(parts));
+    }
+    return out;
+  }
+
+  function colLetters(ref) {
+    // "AB12" -> "AB"
+    var i = 0;
+    while (i < ref.length && ref.charCodeAt(i) >= 65) i++;
+    return ref.slice(0, i);
+  }
+  function colToIndex(letters) {
+    var n = 0;
+    for (var i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  // Resolve a worksheet cell's value to string|number given its type + shared strings.
+  function cellValue(cellXml, type, shared) {
+    var vm = /<v>([\s\S]*?)<\/v>/.exec(cellXml);
+    if (!vm) {
+      var inl = /<t[^>]*>([\s\S]*?)<\/t>/.exec(cellXml); // inline string
+      return inl ? decodeEntities(inl[1]) : null;
+    }
+    var raw = vm[1];
+    if (type === "s") return shared[+raw];
+    if (type === "str") return decodeEntities(raw);
+    if (type === "b") return raw === "1";
+    return parseFloat(raw); // number (incl. date serials), default
+  }
+
+  // ---- main --------------------------------------------------------------
+
+  function pickWorksheet(zip) {
+    // Map sheet name -> r:id (workbook.xml), r:id -> target (rels).
+    var wbName = "xl/workbook.xml";
+    // we already have these inflated by caller; handled in read()
+    return null;
+  }
+
+  async function read(arrayBuffer, sourceName) {
+    var zip = listEntries(arrayBuffer);
+
+    var wbXml = await readText(zip, "xl/workbook.xml");
+    var relsXml = await readText(zip, "xl/_rels/workbook.xml.rels");
+    if (!wbXml || !relsXml) throw new Error("Missing workbook parts in .xlsx.");
+
+    // sheet name -> rId
+    var sheets = {};
+    var sRe = /<sheet\b[^>]*\/?>/g, sm;
+    while ((sm = sRe.exec(wbXml))) {
+      var nm = /name="([^"]+)"/.exec(sm[0]);
+      var rid = /r:id="([^"]+)"/.exec(sm[0]);
+      if (nm && rid) sheets[decodeEntities(nm[1])] = rid[1];
+    }
+    // rId -> target path
+    var rels = {};
+    var rRe = /<Relationship\b[^>]*\/?>/g, rm;
+    while ((rm = rRe.exec(relsXml))) {
+      var id = /Id="([^"]+)"/.exec(rm[0]);
+      var tg = /Target="([^"]+)"/.exec(rm[0]);
+      if (id && tg) rels[id[1]] = tg[1];
+    }
+
+    var sheetName = sheets["Query result"] ? "Query result"
+      : Object.keys(sheets)[Object.keys(sheets).length - 1];
+    if (!sheetName) throw new Error("No worksheets found.");
+    var target = rels[sheets[sheetName]];
+    if (!target) throw new Error("Could not resolve sheet '" + sheetName + "'.");
+    var sheetPath = "xl/" + target.replace(/^\//, "").replace(/^xl\//, "");
+
+    var shared = parseSharedStrings(await readText(zip, "xl/sharedStrings.xml"));
+    var sheetXml = await readText(zip, sheetPath);
+    if (!sheetXml) throw new Error("Could not read worksheet data.");
+
+    // Walk rows.
+    var rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g, rowM;
+    var cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
+
+    var colIndex = null; // header-name -> 0-based column index
+    var records = [], minP = null, maxP = null;
+    var firstRow = true;
+
+    while ((rowM = rowRe.exec(sheetXml))) {
+      var rowInner = rowM[1];
+      var cells = {}; // colIdx -> value
+      var cm;
+      cellRe.lastIndex = 0;
+      while ((cm = cellRe.exec(rowInner))) {
+        var attrs = cm[1], body = cm[2] || "";
+        var ref = /r="([A-Z]+\d+)"/.exec(attrs);
+        if (!ref) continue;
+        var ci = colToIndex(colLetters(ref[1]));
+        var tt = /t="([^"]+)"/.exec(attrs);
+        cells[ci] = cellValue(body, tt ? tt[1] : null, shared);
+      }
+
+      if (firstRow) {
+        firstRow = false;
+        colIndex = {};
+        Object.keys(cells).forEach(function (ci) {
+          var name = cells[ci];
+          if (typeof name === "string") colIndex[name.trim()] = +ci;
+        });
+        var missing = NEEDED.filter(function (n) {
+          return n !== "status" && !(n in colIndex);
+        });
+        if (missing.length) {
+          throw new Error("Sheet '" + sheetName + "' is missing columns: " +
+            missing.join(", ") + ". Make sure you exported the 'Query result' tab.");
+        }
+        continue;
+      }
+
+      var serial = cells[colIndex.order_date];
+      if (typeof serial !== "number" || !isFinite(serial)) continue;
+      var iso = serialToISO(serial);              // YYYY-MM-DD
+      var y = +iso.slice(0, 4), mo = +iso.slice(5, 7);
+      var period = y * 12 + (mo - 1);             // month ordinal
+      var dd = +iso.slice(8, 10);
+      var t = Date.UTC(y, mo - 1, dd);
+      var dow = new Date(t).getUTCDay();          // 0=Sun … 6=Sat
+      var wkstart = Math.floor(t / 86400000) - (dow === 0 ? 6 : dow - 1); // Monday ordinal
+
+      var sub = cells[colIndex.subtotal];
+      sub = (typeof sub === "number" && isFinite(sub)) ? sub :
+            (sub == null || isNaN(parseFloat(sub)) ? 0 : parseFloat(sub));
+
+      var statusCol = ("status" in colIndex) ? cells[colIndex.status] : "";
+      var sourceCol = ("source" in colIndex) ? cells[colIndex.source] : "";
+
+      records.push({
+        rep: cells[colIndex.sales_rep] || "(no rep)",
+        clinic: cells[colIndex.clinic_name] || "(no clinic)",
+        drug: cells[colIndex.drug_name] || "(no drug)",
+        period: period,
+        wkstart: wkstart,
+        subtotal: sub,
+        status: statusCol || "",
+        source: (sourceCol && String(sourceCol).trim()) || "(no source)",
+        date: iso,
+      });
+      if (minP === null || period < minP) minP = period;
+      if (maxP === null || period > maxP) maxP = period;
+    }
+
+    if (!records.length) throw new Error("No data rows with a valid order_date were found.");
+
+    // Human-readable month labels for each period ordinal in range.
+    var MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var labels = {};
+    for (var pp = minP; pp <= maxP; pp++) {
+      labels[pp] = MON[pp % 12] + " " + Math.floor(pp / 12);
+    }
+
+    return {
+      generated: new Date().toISOString(),
+      source: sourceName || sheetName,
+      sheet: sheetName,
+      min_period: minP,
+      max_period: maxP,
+      period_labels: labels,
+      records: records,
+    };
+  }
+
+  function serialToISO(serial) {
+    var ms = Date.UTC(1899, 11, 30) + Math.round(serial * 86400) * 1000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  global.XlsxLite = { read: read };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script id="embedded-data" type="application/json"></script>
+<script>
+// Account-manager assignments, joined to orders by clinic name.
+// Source: CRM_Assignments.xlsx ("Company Name" -> "Assigned To").
+// Key = clinic name lowercased with non-alphanumeric characters removed.
+// To refresh when assignments change, regenerate this object from the CRM.
+window.ACCOUNT_MANAGERS = {"atlantawellnessclinic":"Ashlyn Smith","shormedical":"Ashlyn Smith","sakaraspa":"Ashlyn Smith","drrowesessenceofwellness":"Ashlyn Smith","revibemenshealthtucson":"Ashlyn Smith","weightlossmd":"Ashlyn Smith","monarchmasterinjectors":"Ashlyn Smith","serenitymedspageorgia":"Ashlyn Smith","evexiaweightlossandwellness":"Ashlyn Smith","yakimamensclinic":"Ashlyn Smith","dominionhealthcareservices":"Ashlyn Smith","easttowestfunctionalmedicine":"Ashlyn Smith","veinandwellnesscentersoftexas":"Ashlyn Smith","novahealth":"Ashlyn Smith","tucsonwellnessmd":"Ashlyn Smith","vitaivsolutions":"Ashlyn Smith","ultimatemensclinictulsa":"Ashlyn Smith","elitehealthhrthickoryflat":"Ashlyn Smith","elevateivpllc":"Ashlyn Smith","kukuilifestylemedicineclinic":"Ashlyn Smith","loveleehealth":"Ashlyn Smith","legendaryfamilyhealthcarepllcdbalegendarytotalwellnesslongevityspa":"Ashlyn Smith","knightsfamilyhealthnppllc":"Ashlyn Smith","promptcareinc":"Ashlyn Smith","renuuhealth":"Ashlyn Smith","modourgentcare":"Ashlyn Smith","nwiintegrativehealthwellness":"Ashlyn Smith","nirvanixhealth":"Ashlyn Smith","stocksmedicalpllc":"Ashlyn Smith","renegadehealth":"Ashlyn Smith","builttobewellllc":"Ashlyn Smith","nextlevelhealthatvirapel":"Ashlyn Smith","thestoehrcenter":"Ashlyn Smith","cltaesthetics":"Ashlyn Smith","boomtownhealthandwellness":"Ashlyn Smith","resettrtweightloss":"Ashlyn Smith","firststephealthwellness":"Ashlyn Smith","whitelotusaestheticswellness":"Ashlyn Smith","southcarolinaelitephysicians":"Ashlyn Smith","chatugemedspaandfitness":"Ashlyn Smith","regenu":"Ashlyn Smith","aestheticoasis":"Ashlyn Smith","gladdenlongevity":"Ashlyn Smith","stonegatewellnessweightmanagement":"Ashlyn Smith","wilkesrejuvenationmd":"Ashlyn Smith","doctorparianaturopathicinc":"Ashlyn Smith","intercoastalhealth":"Ashlyn Smith","renovemedspa":"Ashlyn Smith","thelabmn":"Ashlyn Smith","erosmedical":"Ashlyn Smith","restorefunctionalmedicine":"Ashlyn Smith","77wellness":"Ashlyn Smith","evolvewellnessclinic":"Ashlyn Smith","phoenixweightloss":"Ashlyn Smith","louloumedspa":"Ashlyn Smith","qwikmedclinic":"Ashlyn Smith","giddieskinmedspa":"Ashlyn Smith","ycitytelemedicine":"Ashlyn Smith","rimimedaesthetics":"Ashlyn Smith","paragonsportsmedicine":"Ashlyn Smith","focusedmenshealthcareinc":"Ashlyn Smith","thedripbargrandforks":"Ashlyn Smith","personifiedaesthetics":"Ashlyn Smith","beautepc":"Ashlyn Smith","holycityhealthcareconsultants":"Ashlyn Smith","rcmcmedicalcenterleander":"Ashlyn Smith","rcmcmedicalcenterhesperia":"Ashlyn Smith","rcmcmedicalcentercucamonga":"Ashlyn Smith","rcmcmedicalcenterbanning":"Ashlyn Smith","evolveantiagingandwellness":"Ashlyn Smith","solutionsintegrativewellness":"Ashlyn Smith","s2gmedicalspawestbloomfield":"Ashlyn Smith","s2gmedicalspacommerce":"Ashlyn Smith","gamedaymenshealtheggharbor":"Ashlyn Smith","advancedmedicalweightlossrx":"Ashlyn Smith","medpureweightlossincdbamedpure":"Ashlyn Smith","newmoonhealthandwellnesspllc":"Ashlyn Smith","revibemenshealthsacramento":"Ashlyn Smith","rockbodyclinic":"Ashlyn Smith","peakhealthspan":"Ashlyn Smith","westashevilleaestheticswellness":"Ashlyn Smith","mesanaturalmedicine":"Ashlyn Smith","newbeginningswellnessclinic":"Ashlyn Smith","wisdomofagesllc":"Ashlyn Smith","vitalityhealthwellness":"Ashlyn Smith","lotusmedspa":"Ashlyn Smith","theaestheticstudio":"Ashlyn Smith","geontabbalmdpllc":"Ashlyn Smith","802northwellnessandaestheticsllc":"Ashlyn Smith","elitehealthhrtroswell":"Ashlyn Smith","thrivex":"Ashlyn Smith","paullallergyrheumatology":"Ashlyn Smith","virginiahealthyweight":"Ashlyn Smith","nulifeinstitute":"Ashlyn Smith","hydrate315":"Ashlyn Smith","dreamsaestheticsandwellness":"Ashlyn Smith","gamedaymenshealtheastbrunswick":"Ashlyn Smith","medyweightloss":"Ashlyn Smith","optimizationclinic":"Ashlyn Smith","lotusmedicalllc":"Ashlyn Smith","clarisconciergehealth":"Ashlyn Smith","saluswellness":"Ashlyn Smith","dgoptimizedwellnessandhormonesllc":"Ashlyn Smith","agewell":"Ashlyn Smith","legacyhealth":"Ashlyn Smith","southeastneurologyandpainmanagementspecialists":"Ashlyn Smith","absolutehormone":"Ashlyn Smith","bayousidehealthwellness":"Ashlyn Smith","orangeviewlasvegashealthcare":"Ashlyn Smith","priorityyoumd":"Ashlyn Smith","pashenhealth":"Ashlyn Smith","theholisticandwellnessinstituteoftampa":"Ashlyn Smith","hormonehealthandwellnessofthepalmbeaches":"Ashlyn Smith","sevenmedicalaesthetics":"Ashlyn Smith","mountainparkmedicalaestheticswellnesspllc":"Ashlyn Smith","aestheticenhancements":"Ashlyn Smith","ascendmed":"Ashlyn Smith","synergybehavioralhealthllc":"Ashlyn Smith","primevitalitymenshealth":"Ashlyn Smith","nxtlevelchiropracticintegratedhealth":"Ashlyn Smith","cardiologycenterofamarillo":"Ashlyn Smith","ivyaestheticsmedspa":"Ashlyn Smith","vervehealth":"Ashlyn Smith","andromedamedspa":"Ashlyn Smith","badillolongevitylab":"Ashlyn Smith","evolvedmedical":"Ashlyn Smith","activemedicalgroup":"Ashlyn Smith","veritasmedicalcenter":"Ashlyn Smith","epicmedspaweightlossclinic":"Ashlyn Smith","socalslim":"Ashlyn Smith","gracewellnessaestheticsstudiopllc":"Ashlyn Smith","gamedaymenshealthholmdel":"Ashlyn Smith","drc360":"Ashlyn Smith","caconciergemedicine":"Ashlyn Smith","gamedaymenshealthexton":"Ashlyn Smith","gamedaymenshealthowingsmills":"Ashlyn Smith","jcpchealth":"Ashlyn Smith","improvedhealthsolutions":"Ashlyn Smith","medfitweightlossandwellness":"Ashlyn Smith","peptidesfirst":"Ashlyn Smith","207wellnessllc":"Ashlyn Smith","gamedaymenshealthroxbury":"Ashlyn Smith","jumpstartmd":"Ashlyn Smith","normarochemdpa":"Ashlyn Smith","tmatescommdexam":"Ashlyn Smith","sanolongevity":"Ashlyn Smith","sculptaesthetics":"Ashlyn Smith","luxeaestheticsandwellness":"Ashlyn Smith","restorationwellnessllc":"Ashlyn Smith","nuhealthmedicalwellness":"Ashlyn Smith","thedripbarhuntingtonbeach":"Ashlyn Smith","gamedaymenshealthhaddonfield":"Ashlyn Smith","carolinatrimclinic":"Ashlyn Smith","optimalwellnessgroupllc":"Ashlyn Smith","leandose":"Ashlyn Smith","strunkdirectcare":"Ashlyn Smith","jomonwellnessllc":"Ashlyn Smith","lifemedicalsc":"Ashlyn Smith","vivacaresolutions":"Ashlyn Smith","westcoastcaconciergemedicine":"Ashlyn Smith","jumpstartmdwalnutcreek":"Ashlyn Smith","jumpstartmdsantacruzcapitola":"Ashlyn Smith","jumpstartmdsanjose":"Ashlyn Smith","jumpstartmdsflaurelheights":"Ashlyn Smith","jumpstartmdsfembarcadero":"Ashlyn Smith","jumpstartmdredwoodcity":"Ashlyn Smith","jumpstartmdpleasanton":"Ashlyn Smith","jumpstartmdpiedmont":"Ashlyn Smith","jumpstartmdmountainview":"Ashlyn Smith","jumpstartmdmontereybay":"Ashlyn Smith","jumpstartmdmarin":"Ashlyn Smith","jumpstartmdirvine":"Ashlyn Smith","jumpstartmdcampbell":"Ashlyn Smith","jumpstartmdburlingame":"Ashlyn Smith","simplywurthitmedicalweightlossstpeters":"Ashlyn Smith","junemcastnermd":"Ashlyn Smith","athenamedicalamwlpllc":"Ashlyn Smith","refinevitality":"Ashlyn Smith","theaestheticswellnessstudio":"Ashlyn Smith","balancemedical":"Ashlyn Smith","ultimatemensclinicoklahomacity":"Ashlyn Smith","balancedbhrt":"Ashlyn Smith","mosaicmenshealthtestosterone":"Ashlyn Smith","mosaicwomenshealth":"Ashlyn Smith","thewaltzmaninstitute":"Ashlyn Smith","optihealthrx":"Ashlyn Smith","rainierblossomaesthetics":"Ashlyn Smith","allelehealthcareinc":"Ashlyn Smith","soundmindhealthcarellc":"Ashlyn Smith","sevenreveries":"Ashlyn Smith","blisswellnesspa":"Ashlyn Smith","integratedhealthandwellnesscenterpc":"Ashlyn Smith","apexhealthcaresolutions":"Ashlyn Smith","govitashot":"Ashlyn Smith","aetheriawellnessmedicalclinic":"Ashlyn Smith","vitalifywellnessnorthport":"Ashlyn Smith","mediweightloss":"Ashlyn Smith","reviveivwellness":"Ashlyn Smith","gethealthymedicine":"Ashlyn Smith","physlimphysicianguidedweightloss":"Ashlyn Smith","miramedanddayspa":"Ashlyn Smith","skinnyformularies":"Ashlyn Smith","convenientvirtualcare":"Ashlyn Smith","totalhealthcaremd":"Ashlyn Smith","tranquilicare":"Ashlyn Smith","scottsdalerestorativemedicine":"Ashlyn Smith","omarhealth":"Ashlyn Smith","lunaluxe":"Ashlyn Smith","newhealthfamilycare":"Ashlyn Smith","thedistrictinjector":"Ashlyn Smith","pbla":"Ashlyn Smith","glowaestheticshormonellc":"Ashlyn Smith","simplyuluxuryspallc":"Ashlyn Smith","caprihealthandwellness":"Ashlyn Smith","genesisintegrativemedicinesc":"Ashlyn Smith","gamedaymenshealthlancaster":"Ashlyn Smith","gamedaymenshealthkingofprussia":"Ashlyn Smith","gamedaymenshealthfrederick":"Ashlyn Smith","greathydrationwellness":"Ashlyn Smith","talonwellness":"Ashlyn Smith","glowcowellnessaesthetics":"Ashlyn Smith","gamedaymenshealthmarlton":"Ashlyn Smith","dripwellnessllcdbaivolution":"Ashlyn Smith","gamedaymenshealthmedia":"Ashlyn Smith","theskinclinic":"Ashlyn Smith","1stwellnessclinic":"Ashlyn Smith","ivwellnessinfusionservicesllc":"Ashlyn Smith","tropicaltelemedicine":"Ashlyn Smith","toledobladeweightloss":"Ashlyn Smith","georgecarrollmdpa":"Ashlyn Smith","skyhealth":"Ashlyn Smith","energyhealthwellnessllc":"Ashlyn Smith","advancedmedicalandwellness":"Ashlyn Smith","bexarlongevityandaesthetics":"Ashlyn Smith","thrivewelloasis":"Ashlyn Smith","drivenhealthandwellness":"Ashlyn Smith","optimize360":"Ashlyn Smith","almostheavenmobilehydrationllc":"Ashlyn Smith","medishlaserspaandweightlosspllc":"Ashlyn Smith","seleneskinandmedspa":"Ashlyn Smith","evolutionhealthwellnesscenter":"Ashlyn Smith","rocklandwellnesscenter":"Ashlyn Smith","tangnaturopathic":"Ashlyn Smith","paigemarienpindiana":"Ashlyn Smith","energywellness":"Ashlyn Smith","vistawellness":"Ashlyn Smith","faithinternalmedicine":"Ashlyn Smith","justlavenderfunctionalmedicine":"Ashlyn Smith","agelessfunctionalmedicineapc":"Ashlyn Smith","neosfunctionalmedicine":"Ashlyn Smith","lifestylephysicians":"Ashlyn Smith","ultratrimclinicofva":"Ashlyn Smith","seasideprimarycareweightlosshrtclinic":"Ashlyn Smith","coastalhealthcare":"Ashlyn Smith","ultratrimclinicofnc":"Ashlyn Smith","theb12storemyrtlebeach":"Ashlyn Smith","therepaireroom":"Ashlyn Smith","lifelongbalance":"Ashlyn Smith","vivamdaesthetics":"Ashlyn Smith","pathwayhealthbeauty":"Ashlyn Smith","livewelllounge":"Ashlyn Smith","juvenismedical":"Ashlyn Smith","luxeconciergeaestheticsllc":"Ashlyn Smith","privvyhealth":"Ashlyn Smith","integratedwellness":"Ashlyn Smith","harmonyhealthandwellnessclinic":"Ashlyn Smith","aquafusionivtherapypllc":"Ashlyn Smith","edgewatermedicalclinic":"Ashlyn Smith","camdencosmeticsllc":"Ashlyn Smith","palmbeachbeautyandwellness":"Ashlyn Smith","anewmedspaclinicsavannah":"Ashlyn Smith","modernizedwellness":"Ashlyn Smith","thecenterforfunctionalaestheticandantiagingmedicine":"Ashlyn Smith","astrahealthandwellness":"Ashlyn Smith","feelbetterhealthalaskadbaidgiehealth":"Ashlyn Smith","summitlifestylemedicine":"Ashlyn Smith","eleganceempireaesthetics":"Ashlyn Smith","skyyaesthetics":"Ashlyn Smith","newlevelhealing":"Ashlyn Smith","lumahealth":"Ashlyn Smith","careolinawellnessandinfusioncenter":"Ashlyn Smith","restorehealthandwellness":"Ashlyn Smith","integrativewomenshealthhawaii":"Ashlyn Smith","lookrejuvenatedmedical":"Ashlyn Smith","functionalmedoflv":"Ashlyn Smith","liveagelessly":"Ashlyn Smith","superlongevityclinic":"Ashlyn Smith","centerformen":"Ashlyn Smith","adarabeautywellness":"Ashlyn Smith","ivhydrateanywhere":"Ashlyn Smith","skokiefamilyclinic":"Ashlyn Smith","revitalizeyouweightlosscenterllc":"Ashlyn Smith","healthieryouweightlossandwellness":"Ashlyn Smith","oakandstonewellness":"Ashlyn Smith","zenregen":"Ashlyn Smith","springlifehealthandwellness":"Ashlyn Smith","balancelabaesthetics":"Ashlyn Smith","renopremiermedicinepllc":"Ashlyn Smith","transformityllc":"Ashlyn Smith","simplywurthitmedicalweightlosswentzville":"Ashlyn Smith","rivivewellness":"Ashlyn Smith","appalachianrevival":"Ashlyn Smith","islandmedicalgroupllc":"Ashlyn Smith","vytalia":"Ashlyn Smith","npmodalities":"Ashlyn Smith","mchealthcaresolutions":"Ashlyn Smith","liorahealth":"Ashlyn Smith","beltrebariatrics":"Ashlyn Smith","tronehealthllc":"Ashlyn Smith","realcarewellnessrealcarewellnessllc":"Ashlyn Smith","rebalancehealthandwellness":"Ashlyn Smith","ositahealthclinic":"Ashlyn Smith","mosaicweightloss":"Ashlyn Smith","metromedhealth":"Ashlyn Smith","ivhydrationvitamintherapy":"Ashlyn Smith","humaneticsllc":"Ashlyn Smith","gowellmedspa":"Ashlyn Smith","ferraramedicalaesthetics":"Ashlyn Smith","edenaestheticswellnessllc":"Ashlyn Smith","dvwellnessmiami":"Ashlyn Smith","drexleraestheticsweightloss":"Ashlyn Smith","thrivewellnessclinic":"Ashlyn Smith","stonybrookholisticwellness":"Ashlyn Smith","spwellnesscompany":"Ashlyn Smith","slimnowmdmedicalweightlossclinic":"Ashlyn Smith","serenamedicalspa":"Ashlyn Smith","seattlewellnessprograms":"Ashlyn Smith","restorativewellnessmedspa":"Ashlyn Smith","offweightlosssolutions":"Ashlyn Smith","longevitycenterbeverlyhills":"Ashlyn Smith","beyondthespinetherapyinc":"Ashlyn Smith","bellecutis":"Ashlyn Smith","healthon":"Ashlyn Smith","optimalwellnessnp":"Ashlyn Smith","westernwellnessandweightloss":"Ashlyn Smith","balancepointtotalbodywellness":"Ashlyn Smith","turnbacktimeaestheticsandwellnessllc":"Ashlyn Smith","recellebrate":"Ashlyn Smith","restoreregenerativesportsmedicine":"Ashlyn Smith","elitemedspacorp":"Ashlyn Smith","thrivewellwellnessandaesthetics":"Ashlyn Smith","208healthcare":"Ashlyn Smith","129healthwellness":"Ashlyn Smith","elevatemedicalgroup":"Ashlyn Smith","medstationclinic":"Ashlyn Smith","quantumwellness":"Ashlyn Smith","essencemedicalclinic":"Ashlyn Smith","thrivewellnessstudio":"Ashlyn Smith","directprimarycareofoklahoma":"Ashlyn Smith","mettetalfamilymedicine":"Ashlyn Smith","maheletmamo":"Ashlyn Smith","synchronicityhealth":"Ashlyn Smith","perfectskinlasercenterllc":"Ashlyn Smith","trimivinfusions":"Ashlyn Smith","bengabaie":"Ashlyn Smith","justinceravolo":"Ashlyn Smith","healthyenhancements":"Ashlyn Smith","aestheticmedstudio":"Ashlyn Smith","mountainmedicalassociates":"Ashlyn Smith","waylessweightlossclinic":"Ashlyn Smith","lerdalhealthandwellnessllc":"Ashlyn Smith","essentiallaserandskininstitute":"Ashlyn Smith","avalonprofessionalpharmacyllc":"Ashlyn Smith","blueridgehealthsolutionsllcdbacroftonpharmacy":"Ashlyn Smith","livingwellmedspallc":"Maria Victoria Michelli","onlymedglam":"Maria Victoria Michelli","thewellnesslabiv":"Maria Victoria Michelli","vitamobile":"Maria Victoria Michelli","wbglobalcare":"Maria Victoria Michelli","mitohealthholdingscorp":"Maria Victoria Michelli","balancedwellness":"Maria Victoria Michelli","advancedpurewellness":"Maria Victoria Michelli","suncitymedicalclinic":"Maria Victoria Michelli","altheiaintegrative":"Maria Victoria Michelli","adorneaesthetics":"Maria Victoria Michelli","qualityhealthclinic":"Maria Victoria Michelli","vitalisperformancelongevity":"Maria Victoria Michelli","bbmhealthandwellnessreviva4wellness":"Maria Victoria Michelli","kulcontourstudio":"Maria Victoria Michelli","cornellwellnessandaesthetics":"Maria Victoria Michelli","liensosaludmedspa":"Maria Victoria Michelli","swanmedicalgroup":"Maria Victoria Michelli","apexhealthwellness":"Maria Victoria Michelli","truglowwellnessaesthetics":"Maria Victoria Michelli","belaviewellnessclinicpllc":"Maria Victoria Michelli","carpathiahealth":"Maria Victoria Michelli","frontdoormedspa":"Maria Victoria Michelli","gamedaymenshealthwaldorf":"Maria Victoria Michelli","summerskinmedical":"Maria Victoria Michelli","laccura":"Maria Victoria Michelli","laurenlucas":"Maria Victoria Michelli","therenewallab":"Maria Victoria Michelli","englerstonhealthcorporation":"Maria Victoria Michelli","caskinbodyclinic":"Maria Victoria Michelli","solidagointegrativehealth":"Maria Victoria Michelli","vitaleewellnessgroupllc":"Maria Victoria Michelli","upliftlongevitypllc":"Maria Victoria Michelli","entyresophiacogliano":"Maria Victoria Michelli","lumoraaestheticswellness":"Maria Victoria Michelli","hydrahealthwellness":"Maria Victoria Michelli","craftpeptides":"Maria Victoria Michelli","grantspassclinic":"Maria Victoria Michelli","ondemandhealthcare":"Maria Victoria Michelli","thinfastmdrockford":"Maria Victoria Michelli","thinfastmdhinsdale":"Maria Victoria Michelli","toxbaraestheticboutique":"Maria Victoria Michelli","greenhealthclinic":"Maria Victoria Michelli","medritehealthllc":"Maria Victoria Michelli","truwellnesscharlottepllc":"Maria Victoria Michelli","balancerestorewellness":"Maria Victoria Michelli","northidahoregenerativemedicine":"Maria Victoria Michelli","vitalflowhydrationwellness":"Maria Victoria Michelli","highcountrycareconnect":"Maria Victoria Michelli","comprehensivehealthok":"Maria Victoria Michelli","renuehealth":"Maria Victoria Michelli","vibrantmewellness":"Maria Victoria Michelli","monogrammedspa":"Maria Victoria Michelli","liveamedicalwoodbury":"Maria Victoria Michelli","liveamedicalstcloud":"Maria Victoria Michelli","liveamedicalroseville":"Maria Victoria Michelli","liveamedicalminnetonka":"Maria Victoria Michelli","liveamedicaledina":"Maria Victoria Michelli","liveamedicaleauclaire":"Maria Victoria Michelli","liveamedicalapplevalley":"Maria Victoria Michelli","rootedwellnessprimarycare":"Maria Victoria Michelli","litotalwellness":"Maria Victoria Michelli","revivelounge":"Maria Victoria Michelli","gt3health":"Maria Victoria Michelli","24sculptaesthetics":"Maria Victoria Michelli","specializedmedical":"Maria Victoria Michelli","dryamenskorab":"Maria Victoria Michelli","luxewellnessca":"Maria Victoria Michelli","silversweet":"Maria Victoria Michelli","ritzxvpllc":"Maria Victoria Michelli","d3beautyandwellness":"Maria Victoria Michelli","oldmissionlifestylemedicine":"Maria Victoria Michelli","med1aestheticsannarbor":"Maria Victoria Michelli","doralacupuncture":"Maria Victoria Michelli","healtharisingllc":"Maria Victoria Michelli","trimfittllc":"Maria Victoria Michelli","livealivehealthoptimization":"Maria Victoria Michelli","4shealthwellness":"Maria Victoria Michelli","sandiegocenterforrestorativemedicine":"Maria Victoria Michelli","estheticswellnessinternationalinc":"Maria Victoria Michelli","emghealthandwellness":"Maria Victoria Michelli","mindfullivingsolutions":"Maria Victoria Michelli","harmonymedicalconciergewellnessstudiollc":"Maria Victoria Michelli","mindfulovermatter":"Maria Victoria Michelli","universalmedicalwellnesscenter":"Maria Victoria Michelli","europrohealthaesthetics":"Maria Victoria Michelli","healthwellnessmedicalhydration":"Maria Victoria Michelli","aboveandbeyondaestheticsandwellness":"Maria Victoria Michelli","optimaluwellnesspllc":"Maria Victoria Michelli","revive":"Maria Victoria Michelli","albrightwellnesscenterllc":"Maria Victoria Michelli","thelongevitycentergreenville":"Maria Victoria Michelli","theglocompany":"Maria Victoria Michelli","jouvencemedspa":"Maria Victoria Michelli","balancedweightlosssolutions":"Maria Victoria Michelli","mainemobilehealthandvirtualcarepllc":"Maria Victoria Michelli","glowhealthandwellness":"Maria Victoria Michelli","haloclinicalservices":"Maria Victoria Michelli","vitalutywellness":"Maria Victoria Michelli","autumnsunwellnessllc":"Maria Victoria Michelli","lucedaleaestheticsandwellnessllc":"Maria Victoria Michelli","majesticnoiraestheticandwellnessplcc":"Maria Victoria Michelli","generationshealthcare":"Maria Victoria Michelli","familyfirstprimarycare":"Maria Victoria Michelli","pleasantviewhealthpllc":"Maria Victoria Michelli","eatonhealthclinic":"Maria Victoria Michelli","recreahealthandwellness":"Maria Victoria Michelli","brightlytelehealthpllc":"Maria Victoria Michelli","thehansellcenterforfunctionalmedicinepllc":"Maria Victoria Michelli","rhrejuvenationandhealthlafayette":"Maria Victoria Michelli","taffewellnesscenter":"Maria Victoria Michelli","earthremediesoffloridallc":"Maria Victoria Michelli","grvwellnessclinic":"Maria Victoria Michelli","huttowellness":"Maria Victoria Michelli","phimdaestheticsrejuvenation":"Maria Victoria Michelli","appliedwisdomhealthinstitute":"Maria Victoria Michelli","pushmedspa":"Maria Victoria Michelli","halohealthwellness":"Maria Victoria Michelli","nextlvlinfusion":"Maria Victoria Michelli","reviveyoupllc":"Maria Victoria Michelli","banerjiplasticsurgery":"Maria Victoria Michelli","neriamedicalandwellness":"Maria Victoria Michelli","nataliaermakovaaprnfnpc":"Maria Victoria Michelli","revivedmedspallc":"Maria Victoria Michelli","legacywellnesspllc":"Maria Victoria Michelli","everflowinghealthllc":"Maria Victoria Michelli","hollowayhealthllc":"Maria Victoria Michelli","resurgencevitalityllc":"Maria Victoria Michelli","batesprimarycare":"Maria Victoria Michelli","wilsonaestheticcompany":"Maria Victoria Michelli","azmedspa48":"Maria Victoria Michelli","shereefsalem":"Maria Victoria Michelli","elixirmedspa":"Maria Victoria Michelli","liveamedicalcoonrapids":"Maria Victoria Michelli","5thwellness":"Maria Victoria Michelli","elev8healthwellness":"Maria Victoria Michelli","thephysiqueboutique":"Maria Victoria Michelli","entyre":"Maria Victoria Michelli","denverregenerativemedicine":"Maria Victoria Michelli","honestweightlossandhormonereplacementllc":"Maria Victoria Michelli","flowglowwellnessmedspa":"Maria Victoria Michelli","valleytrim":"Maria Victoria Michelli","edenfunctionalmedicine":"Maria Victoria Michelli","thesknbaraestheticswellness":"Maria Victoria Michelli","gamedaymenshealthlascolinas":"Maria Victoria Michelli","justpeachiewellnessaesthetics":"Maria Victoria Michelli","vitalityinfusionandwellness":"Maria Victoria Michelli","blacktiehealth":"Maria Victoria Michelli","myfitmedfrisco":"Maria Victoria Michelli","eliteoptionsweightlossivtherapy":"Maria Victoria Michelli","todabonita4uaestheticswellness":"Maria Victoria Michelli","klevgardnursingservice":"Maria Victoria Michelli","healthyhabitswellnessclinicinc":"Maria Victoria Michelli","gamedaymenshealthgaithersburg":"Maria Victoria Michelli","legacyhealthandlongevity":"Maria Victoria Michelli","revitalhealthandwellnessclinics":"Maria Victoria Michelli","fanousmedspamedicalncpllc":"Maria Victoria Michelli","goldenwellnessandaestheticsllc":"Maria Victoria Michelli","gamedaymenshealthburlington":"Maria Victoria Michelli","doeringmedicalllc":"Maria Victoria Michelli","nextlevelmd":"Maria Victoria Michelli","evolvehealthpllc":"Maria Victoria Michelli","southfloridatrimclinic":"Maria Victoria Michelli","m2medicalspaandwellnesspc":"Maria Victoria Michelli","xperiencehealthllc":"Maria Victoria Michelli","winmindintegrativehealth":"Maria Victoria Michelli","thewellnesseditmedspalongevitycenter":"Maria Victoria Michelli","alphaperformancehealthllc":"Maria Victoria Michelli","maximumperformancemedicine":"Maria Victoria Michelli","belfiorewellnesscenterllc":"Maria Victoria Michelli","empowerfitmedicalllc":"Maria Victoria Michelli","hyclasshydration":"Maria Victoria Michelli","truevertex":"Maria Victoria Michelli","kavnhealth":"Maria Victoria Michelli","progressivehealthrejuvenation":"Maria Victoria Michelli","gamedaymenshealthcolumbia":"Maria Victoria Michelli","sunshinemedicalaesthetics":"Maria Victoria Michelli","arizonahealthandwellnessclinic":"Maria Victoria Michelli","bodyrevival":"Maria Victoria Michelli","hopkinshealthandwellness":"Maria Victoria Michelli","theruralaestheticmedspa":"Maria Victoria Michelli","clinicinfinityllc":"Maria Victoria Michelli","vividcosmeticstudio":"Maria Victoria Michelli","corewellnessandrecovery":"Maria Victoria Michelli","gloskinaestheticswestvirginia":"Maria Victoria Michelli","nvmedicalaesthetics":"Maria Victoria Michelli","alpineapresnurseconciergellc":"Maria Victoria Michelli","coreivtherapy":"Maria Victoria Michelli","snatcheddollaesthetics":"Maria Victoria Michelli","bibianasmedicalconciergeivlounge":"Maria Victoria Michelli","synergyintegrativemedicalclinic":"Maria Victoria Michelli","optimalwellnessmedicalgroup":"Maria Victoria Michelli","gamedaymenshealthmemphis":"Maria Victoria Michelli","pinesagewellnessllc":"Maria Victoria Michelli","apollohouse":"Maria Victoria Michelli","thewestwellnessandmassage":"Maria Victoria Michelli","leaderhealth":"Maria Victoria Michelli","medicalweightlosssolutions":"Maria Victoria Michelli","bewellclinicofmobilellc":"Maria Victoria Michelli","endouraeffectpllc":"Maria Victoria Michelli","dasilvainstitute":"Maria Victoria Michelli","emagymedspa":"Maria Victoria Michelli","thepazioinstitute":"Maria Victoria Michelli","missionmedwellness":"Maria Victoria Michelli","authentichealthfamilycareprecisionmedicine":"Maria Victoria Michelli","greatshot":"Maria Victoria Michelli","signatureweightlosswellness":"Maria Victoria Michelli","thedripbarscottsdale":"Maria Victoria Michelli","balancedbodymd":"Maria Victoria Michelli","stlouismensclinic":"Maria Victoria Michelli","gamedaymenshealthfortworth":"Maria Victoria Michelli","landerhopeclinic":"Maria Victoria Michelli","sunshineclinicjasper":"Maria Victoria Michelli","rootswellnessprofessionalnursingcorp":"Maria Victoria Michelli","trinitynaturopathic":"Maria Victoria Michelli","reviveinjectionclinic":"Maria Victoria Michelli","bloombeautybyfiorella":"Maria Victoria Michelli","lagraziaaestheticsandwellness":"Maria Victoria Michelli","thebougiebeemd":"Maria Victoria Michelli","gamedaymenshealthsouthcharlotte":"Maria Victoria Michelli","newyouweightlosswellnesscenter":"Maria Victoria Michelli","glow365llc":"Maria Victoria Michelli","leanlifewellnesscenter":"Maria Victoria Michelli","enviouskinaesthetics":"Maria Victoria Michelli","lomed":"Maria Victoria Michelli","sorrellmdpllc":"Maria Victoria Michelli","premiermedspa":"Maria Victoria Michelli","tranphamfamilypracticellc":"Maria Victoria Michelli","mewellnessandbeautyspot":"Maria Victoria Michelli","elanmedspallc":"Maria Victoria Michelli","baynesbiohax":"Maria Victoria Michelli","806aesthetics":"Maria Victoria Michelli","bodyiv":"Maria Victoria Michelli","pureblissaesthetics":"Maria Victoria Michelli","vividaesthetics":"Maria Victoria Michelli","alchemizedbiohealinginstitute":"Maria Victoria Michelli","rootswellness":"Maria Victoria Michelli","apexcarewellnesspllc":"Maria Victoria Michelli","eraesthetics":"Maria Victoria Michelli","vibrantlifemedicine":"Maria Victoria Michelli","fivestarmedicalclinic":"Maria Victoria Michelli","livingwellhealthcenter":"Maria Victoria Michelli","stairwaytohealthurgentcare":"Maria Victoria Michelli","thelongevitycenter":"Maria Victoria Michelli","trueinsightdirectcarepllc":"Maria Victoria Michelli","emoriewyattsaestheticswellness":"Maria Victoria Michelli","revivemodernhealth":"Maria Victoria Michelli","legacyfamilymedicine":"Maria Victoria Michelli","bennettintegrativehealth":"Maria Victoria Michelli","embracingyouaesthetics":"Maria Victoria Michelli","lovethyneighborclinic":"Maria Victoria Michelli","hometownhealthdirectprimarycarepllc":"Maria Victoria Michelli","bearcreekweightloss":"Maria Victoria Michelli","thrivehomehydration":"Maria Victoria Michelli","advancedmedfargo":"Maria Victoria Michelli","knightsconsultingnextlevelwellness":"Maria Victoria Michelli","performrxintegrativehealth":"Maria Victoria Michelli","aminjectionstudiollc":"Maria Victoria Michelli","riverstowellness":"Maria Victoria Michelli","nspireprimarycarellc":"Maria Victoria Michelli","adafamilywellnessclinic":"Maria Victoria Michelli","nudmedicalspa":"Maria Victoria Michelli","purelynourishedspallc":"Maria Victoria Michelli","unboundweightlossmedicalclinicpllc":"Maria Victoria Michelli","balancedhormonehealthandwellnessllc":"Maria Victoria Michelli","sunflowermentalhealthwellnessllc":"Maria Victoria Michelli","synergymedicineflllc":"Maria Victoria Michelli","houseofhealth":"Maria Victoria Michelli","thedripbartownandcountry":"Maria Victoria Michelli","hormonalhealthmd":"Maria Victoria Michelli","bougieandbeautifiedluxurymedspaandprimarycareservicespllc":"Maria Victoria Michelli","jlurenew":"Maria Victoria Michelli","rhrejuvenationandhealthsanjose":"Maria Victoria Michelli","journeytosuccessweightlossclinicllc":"Maria Victoria Michelli","anuhealth":"Maria Victoria Michelli","polkconcierge":"Maria Victoria Michelli","sequoiainfusionaestheticsllc":"Maria Victoria Michelli","vitalityantiagingcenter":"Maria Victoria Michelli","medsmartwellnesscentersinc":"Maria Victoria Michelli","secondwindivwellness":"Maria Victoria Michelli","devoteddoc":"Maria Victoria Michelli","puremedicalweightloss":"Maria Victoria Michelli","revolveantiaging":"Maria Victoria Michelli","stillwaterinfusioncompany2":"Maria Victoria Michelli","redefinemewellnessandaestheticsllc":"Maria Victoria Michelli","lightfamilywellness":"Maria Victoria Michelli","judyljonesfamilynursepractitionerllc":"Maria Victoria Michelli","aklivewellllc":"Maria Victoria Michelli","pureweightmanagementllc":"Maria Victoria Michelli","magnoliafamilywellnessclinic":"Maria Victoria Michelli","timelessaestheticsrn":"Maria Victoria Michelli","theaestheticsloungeandspa":"Maria Victoria Michelli","preventivemedicineantiagingandchelationtherapyca":"Maria Victoria Michelli","sunmedhealthandweightmanagement":"Maria Victoria Michelli","lakemedpllc":"Maria Victoria Michelli","universalfamilycare":"Maria Victoria Michelli","pointtopointhealthandwellness":"Maria Victoria Michelli","healthoutsidetheboxpllcaz":"Maria Victoria Michelli","elitewellness":"Maria Victoria Michelli","danamgoldbergmd":"Maria Victoria Michelli","radiatehealthyllc":"Maria Victoria Michelli","elite360wellness":"Maria Victoria Michelli","evolvingvitalityclinic":"Maria Victoria Michelli","vitalityrestorativemedicine":"Maria Victoria Michelli","legacymedspa":"Maria Victoria Michelli","modmedhealth":"Maria Victoria Michelli","sulcahealthservices":"Maria Victoria Michelli","personalizedlongevitymedicalcenter":"Maria Victoria Michelli","bodyelectricpllcdbapureficomedspaandtherapycornelius":"Maria Victoria Michelli","gamedaymenshealthsanmarcos":"Maria Victoria Michelli","cmhwellness":"Maria Victoria Michelli","tactushealthaestheticsweightlossclinic":"Maria Victoria Michelli","slimcarepllc":"Maria Victoria Michelli","raphaconciergemedandweightloss":"Maria Victoria Michelli","thehideawaywellnessspa":"Maria Victoria Michelli","ultrawellnessmedical":"Maria Victoria Michelli","aceendocrinologyassociatespc":"Maria Victoria Michelli","northstarholisticmedicine":"Maria Victoria Michelli","charlesccartermddphpllc":"Maria Victoria Michelli","delrayskin":"Maria Victoria Michelli","inreachwellnessllc":"Maria Victoria Michelli","galitskiyhealthcareadvisorscorp":"Maria Victoria Michelli","cosmohealthresolutionllc":"Maria Victoria Michelli","alluremedical":"Maria Victoria Michelli","integrutopiamd":"Maria Victoria Michelli","noblefunctionalmedicine":"Maria Victoria Michelli","contouramedspa":"Maria Victoria Michelli","newvivamdweightloss":"Maria Victoria Michelli","rejuvenatelakewylie":"Maria Victoria Michelli","gloryintegrativemedicinellc":"Maria Victoria Michelli","advancedwellness":"Maria Victoria Michelli","asymmetrichealth":"Maria Victoria Michelli","keithmedicalclinic":"Maria Victoria Michelli","revivemedicalweightloss":"Maria Victoria Michelli","artemispeoria":"Maria Victoria Michelli","calledtocarellc":"Nate Graham","mycareexpresscare":"Nate Graham"};
+</script>
+<script>
+const DIMS = [
+  { key: "reps",    field: "rep",    label: "Sales Rep" },
+  { key: "am",      field: "accountManager", label: "Account Manager" },
+  { key: "clinics", field: "clinic", label: "Clinic Name" },
+  { key: "drugs",   field: "drug",   label: "Drug Name" },
+  { key: "source",  field: "source", label: "Source" },
+  { key: "recency", field: "recency", label: "# Mo Since Last Order",
+    values: (data) => data.recencyValues || [] },
+  { key: "mom", field: "mom", label: "30-Day Sales Change",
+    values: (data) => data.momValues || [] },
+];
+
+const state = {
+  data: null,
+  filters: { reps: new Set(), am: new Set(), clinics: new Set(), drugs: new Set(), source: new Set(), recency: new Set(), mom: new Set() },
+  open: new Set(),        // node ids that are expanded
+  expandedMonths: new Set(), // month periods expanded into weeks
+  searches: { reps: "", am: "", clinics: "", drugs: "", source: "", recency: "", mom: "" },
+};
+
+const fmt = (n) => n ? Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "";
+const id = (...p) => p.join("¦");
+
+function init() {
+  // 1) Prefer data embedded in the page (a shared/saved copy).
+  const el = document.getElementById("embedded-data");
+  if (el && el.textContent.trim()) {
+    try {
+      const payload = JSON.parse(el.textContent);
+      payload.source = payload.source || "embedded data";
+      applyPayload(payload);
+      setupDropZone();
+      return;
+    } catch (e) {
+      const loading = document.getElementById("loading");
+      if (loading) { loading.className = "empty";
+        loading.textContent = "Embedded data could not be read: " + e.message; }
+    }
+  }
+  // 2) No embedded data: try bundled JSON (dev), else wait for a dropped file.
+  (async () => {
+    let payload = null;
+    try {
+      let res = await fetch("../data/data.json");
+      if (res.ok) payload = await res.json();
+    } catch (e) { /* ignore */ }
+    if (!payload) {
+      try {
+        const res = await fetch("data/data.json");
+        if (res.ok) payload = await res.json();
+      } catch (e2) { /* no bundled data — wait for a dropped file */ }
+    }
+    if (payload) {
+      applyPayload(payload);
+    } else {
+      document.getElementById("meta").innerHTML =
+        `no data yet —<br><b>drop an .xlsx</b> to begin`;
+      const loading = document.getElementById("loading");
+      loading.className = "empty";
+      loading.textContent = "Drop a Metabase .xlsx export above to build the pivot.";
+    }
+    setupDropZone();
+  })();
+}
+
+function applyPayload(payload) {
+  // Drop records with no real clinic (e.g. Metabase's "No Clinic" / "(no
+  // clinic)" placeholder for orders not tied to a clinic, or blank names) so
+  // they never appear in the pivot, filters, charts, or any export.
+  payload.records = payload.records.filter((r) => {
+    const c = (r.clinic || "").replace(/[()]/g, "").trim().toLowerCase();
+    return c && c !== "no clinic";
+  });
+  // Tag each record with its account manager, joined from the embedded CRM
+  // lookup by clinic name. Clinics not present in the CRM become "(unassigned)".
+  const _AM = (typeof window !== "undefined" && window.ACCOUNT_MANAGERS) || {};
+  const _amKey = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const r of payload.records) {
+    r.accountManager = _AM[_amKey(r.clinic)] || "(unassigned)";
+    if (r.source == null || r.source === "") r.source = "(no source)";
+  }
+  state.data = payload;
+  // Ensure every record has a week bucket (derived from date for raw data).
+  Pivot.normalizeWeeks(payload);
+  // Tag each record with its clinic's "months since last order" bucket and
+  // capture the ordered list of buckets present for the filter options.
+  state.data.recencyValues = Pivot.tagRecency(payload);
+  state.data.momValues = Pivot.tagMomChange(payload);
+  // Reset transient view state for the new dataset.
+  for (const d of DIMS) { state.filters[d.key].clear(); state.searches[d.key] = ""; }
+  state.open.clear();
+  state.expandedMonths.clear();
+
+  document.getElementById("meta").innerHTML =
+    `source <b>${escapeHtml(payload.source || "—")}</b><br>` +
+    `<b>${payload.records.length.toLocaleString()}</b> order lines · ` +
+    `months <b>${(payload.period_labels && payload.period_labels[payload.min_period]) || ""}–${(payload.period_labels && payload.period_labels[payload.max_period]) || ""}</b>`;
+  buildControls();
+  render();
+}
+
+function buildControls() {
+  const host = document.getElementById("controls");
+  host.innerHTML = "";
+  for (const dim of DIMS) {
+    const all = dim.values ? dim.values(state.data) : Pivot.unique(state.data.records, dim.field);
+    const card = document.createElement("div");
+    card.className = "filter";
+    card.innerHTML = `
+      <div class="lbl">
+        <span class="name">${dim.label}</span>
+        <span class="count" id="cnt-${dim.key}"></span>
+      </div>
+      <input class="search" placeholder="filter ${all.length} values…" data-dim="${dim.key}" />
+      <div class="optbox" id="box-${dim.key}"></div>
+      <div class="actions">
+        <button data-act="all" data-dim="${dim.key}">select all</button>
+        <button data-act="none" data-dim="${dim.key}">clear</button>
+      </div>`;
+    host.appendChild(card);
+    renderOptions(dim, all);
+
+    card.querySelector(".search").addEventListener("input", (e) => {
+      state.searches[dim.key] = e.target.value.toLowerCase();
+      renderOptions(dim, all);
+    });
+    card.querySelectorAll(".actions button").forEach((b) =>
+      b.addEventListener("click", () => {
+        const sel = state.filters[dim.key];
+        if (b.dataset.act === "all") {
+          all.filter(v => v.toLowerCase().includes(state.searches[dim.key]))
+             .forEach(v => sel.add(v));
+        } else { sel.clear(); }
+        renderOptions(dim, all); render();
+      })
+    );
+  }
+}
+
+function renderOptions(dim, all) {
+  const box = document.getElementById("box-" + dim.key);
+  const q = state.searches[dim.key];
+  const sel = state.filters[dim.key];
+  const vis = all.filter(v => v.toLowerCase().includes(q));
+  box.innerHTML = "";
+  for (const v of vis.slice(0, 400)) {
+    const row = document.createElement("label");
+    row.className = "opt";
+    row.innerHTML = `<input type="checkbox" ${sel.has(v) ? "checked" : ""}/>
+                     <span class="t" title="${escapeAttr(v)}">${escapeHtml(v)}</span>`;
+    row.querySelector("input").addEventListener("change", (e) => {
+      if (e.target.checked) sel.add(v); else sel.delete(v);
+      document.getElementById("cnt-" + dim.key).textContent =
+        sel.size ? sel.size + " selected" : "all";
+      render();
+    });
+    box.appendChild(row);
+  }
+  document.getElementById("cnt-" + dim.key).textContent =
+    sel.size ? sel.size + " selected" : "all";
+}
+
+function render() {
+  if (!state.data) return;
+  const filtered = Pivot.applyFilters(state.data.records, state.filters);
+  const pivot = Pivot.buildPivot(filtered, {
+    min: state.data.min_period, max: state.data.max_period,
+  });
+
+  const table = document.getElementById("table");
+  const loading = document.getElementById("loading");
+  loading.hidden = true;
+  table.hidden = false;
+
+  document.getElementById("summary").innerHTML =
+    `<b>${filtered.length.toLocaleString()}</b> lines · ` +
+    `<b>${pivot.reps.length}</b> reps · grand total <b>$${fmt(pivot.grandTotal)}</b>`;
+
+  renderCharts(filtered);
+
+  if (!pivot.reps.length) {
+    table.innerHTML = "";
+    loading.hidden = false;
+    loading.className = "empty";
+    loading.textContent = "No rows match the current filters.";
+    table.hidden = true;
+    return;
+  }
+
+  const labels = state.data.period_labels || {};
+
+  // Build the ordered list of visible columns. Each month is one column; an
+  // expanded month is followed by a column for each week that has data.
+  const colDesc = [];
+  for (let i = 0; i < pivot.nCols; i++) {
+    const p = pivot.min + i;
+    const weeks = pivot.weeksPresent[i] || [];
+    const expanded = state.expandedMonths.has(p);
+    colDesc.push({ kind: "month", i, p, expanded, hasWeeks: weeks.length > 0 });
+    if (expanded) for (const wk of weeks) colDesc.push({ kind: "week", i, p, wk });
+  }
+
+  let html = "<thead><tr>";
+  html += `<th class="rowhead">Rep / Clinic / Drug</th>`;
+  for (const d of colDesc) {
+    if (d.kind === "month") {
+      const tw = d.hasWeeks ? `<span class="cwirl ${d.expanded ? "" : "closed"}">▾</span>` : "";
+      const cls = "mcol" + (d.expanded ? " exp" : "") + (d.hasWeeks ? " clk" : "");
+      const attr = d.hasWeeks ? ` data-month="${d.p}" title="Click to ${d.expanded ? "collapse" : "expand into weeks"}"` : "";
+      html += `<th class="${cls}"${attr}>${tw}${labels[d.p] || d.p}</th>`;
+    } else {
+      html += `<th class="wk">${weekLabel(d.wk)}</th>`;
+    }
+  }
+  html += `<th class="gt">Grand&nbsp;Total</th></tr></thead><tbody>`;
+
+  for (const rep of pivot.reps) {
+    const repId = id(rep.name);
+    const repOpen = state.open.has(repId);
+    html += rowHtml("rep", rep, repId, true, repOpen, colDesc);
+    if (repOpen) {
+      for (const clinic of rep.clinics) {
+        const clId = id(rep.name, clinic.name);
+        const clOpen = state.open.has(clId);
+        html += rowHtml("clinic", clinic, clId, true, clOpen, colDesc);
+        if (clOpen) {
+          for (const drug of clinic.drugs) {
+            html += rowHtml("drug", drug, id(clId, drug.name), false, false, colDesc);
+          }
+        }
+      }
+    }
+  }
+
+  // Grand total row
+  html += `<tr class="grand-row"><td class="rowhead"><span class="twirl leaf">•</span><span class="rowname">Grand Total</span></td>`;
+  for (const d of colDesc) {
+    const v = d.kind === "month"
+      ? pivot.grandCols[d.i]
+      : (pivot.grandWcols[d.i] ? (pivot.grandWcols[d.i][d.wk] || 0) : 0);
+    html += cell(v, true, d.kind === "week");
+  }
+  html += `<td class="gt">$${fmt(pivot.grandTotal)}</td></tr>`;
+  html += "</tbody>";
+  table.innerHTML = html;
+
+  table.querySelectorAll(".twirl[data-node]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const nid = el.getAttribute("data-node");
+      if (state.open.has(nid)) state.open.delete(nid); else state.open.add(nid);
+      render();
+    })
+  );
+  table.querySelectorAll(".mcol[data-month]").forEach((el) =>
+    el.addEventListener("click", () => {
+      const p = +el.getAttribute("data-month");
+      if (state.expandedMonths.has(p)) state.expandedMonths.delete(p);
+      else state.expandedMonths.add(p);
+      render();
+    })
+  );
+}
+
+// ── Pie/donut charts per filter dimension ───────────────────────────────
+// Each chart shows the share of total subtotal ($) by category, for the
+// currently filtered records. High-cardinality dims (clinics, drugs) show the
+// top slices with the remainder grouped as "Other"; reps and recency buckets
+// show every category. Recency is ordered by bucket; others by size.
+const PIE_COLORS = ["#b4451f", "#355e3b", "#8a7a55", "#5a4a2f", "#c98a1f",
+                    "#4a6670", "#7a4a52", "#6f7a55", "#2a2620"];
+const PIE_OTHER = "#c4bca8";
+const PIE_TOP_N = 9;
+const PIE_NOUN = { reps: "sales reps", clinics: "clinics", drugs: "drugs", recency: "buckets", mom: "ranges" };
+
+function chartSlices(dim, records) {
+  const m = new Map();
+  for (const r of records) m.set(r[dim.field], (m.get(r[dim.field]) || 0) + r.subtotal);
+  let items = [];
+  for (const [label, value] of m) if (value > 0) items.push({ label, value });
+  const order = dim.values ? dim.values(state.data) : null;
+  // For dims with an explicit value list (recency, MoM), keep only listed
+  // categories — this drops omitted buckets like "No sales either month".
+  if (order) items = items.filter((it) => order.includes(it.label));
+  const nCats = items.length;
+  let truncated = false;
+  if (order) {
+    items.sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
+  } else {
+    items.sort((a, b) => b.value - a.value);
+    if (items.length > PIE_TOP_N + 1) {
+      const rest = items.slice(PIE_TOP_N).reduce((s, x) => s + x.value, 0);
+      items = items.slice(0, PIE_TOP_N);
+      items.push({ label: "Other (" + (nCats - PIE_TOP_N) + ")", value: rest, other: true });
+      truncated = true;
+    }
+  }
+  items.forEach((it, i) => { it.color = it.other ? PIE_OTHER : PIE_COLORS[i % PIE_COLORS.length]; });
+  return { items, nCats, truncated };
+}
+
+function donutSvg(items, total) {
+  const R = 46, r = 27, cx = 50, cy = 50;
+  if (!total || !items.length) return `<svg class="pie" viewBox="0 0 100 100"></svg>`;
+  let paths = "";
+  if (items.length === 1) {
+    paths = `<circle cx="${cx}" cy="${cy}" r="${(R + r) / 2}" fill="none" ` +
+            `stroke="${items[0].color}" stroke-width="${R - r}"/>`;
+  } else {
+    let a0 = -Math.PI / 2;
+    for (const it of items) {
+      const a1 = a0 + (it.value / total) * Math.PI * 2;
+      const large = (a1 - a0) > Math.PI ? 1 : 0;
+      const xo0 = (cx + R * Math.cos(a0)).toFixed(2), yo0 = (cy + R * Math.sin(a0)).toFixed(2);
+      const xo1 = (cx + R * Math.cos(a1)).toFixed(2), yo1 = (cy + R * Math.sin(a1)).toFixed(2);
+      const xi1 = (cx + r * Math.cos(a1)).toFixed(2), yi1 = (cy + r * Math.sin(a1)).toFixed(2);
+      const xi0 = (cx + r * Math.cos(a0)).toFixed(2), yi0 = (cy + r * Math.sin(a0)).toFixed(2);
+      paths += `<path d="M ${xo0} ${yo0} A ${R} ${R} 0 ${large} 1 ${xo1} ${yo1} ` +
+               `L ${xi1} ${yi1} A ${r} ${r} 0 ${large} 0 ${xi0} ${yi0} Z" ` +
+               `fill="${it.color}" style="stroke:var(--panel);stroke-width:0.8"/>`;
+      a0 = a1;
+    }
+  }
+  return `<svg class="pie" viewBox="0 0 100 100">${paths}</svg>`;
+}
+
+function renderCharts(records) {
+  const host = document.getElementById("charts");
+  if (!host) return;
+  host.innerHTML = "";
+  for (const dim of DIMS) {
+    const { items, nCats, truncated } = chartSlices(dim, records);
+    const total = items.reduce((s, x) => s + x.value, 0);
+    const noun = PIE_NOUN[dim.key] || "values";
+    const cap = truncated ? (nCats + " " + noun + " · top " + PIE_TOP_N + " shown")
+                          : (nCats + " " + noun);
+    let legend = "";
+    for (const it of items) {
+      const pct = total ? (it.value / total * 100) : 0;
+      const pctTxt = pct >= 0.5 ? Math.round(pct) + "%" : "&lt;1%";
+      legend += `<div class="lg">` +
+        `<span class="sw" style="background:${it.color}"></span>` +
+        `<span class="lb" title="${escapeAttr(it.label)}">${escapeHtml(it.label)}</span>` +
+        `<span class="vl">${pctTxt}</span></div>`;
+    }
+    const card = document.createElement("div");
+    card.className = "chart-card";
+    card.innerHTML = `<div class="ttl">${escapeHtml(dim.label)}</div>` +
+      `<div class="cap">${cap}</div>` +
+      donutSvg(items, total) +
+      `<div class="legend">${legend}</div>`;
+    host.appendChild(card);
+  }
+}
+
+function weekLabel(wkstart) {
+  return Pivot.weekRangeLabel(wkstart);
+}
+
+function rowHtml(kind, node, nodeId, hasChildren, open, colDesc) {
+  const twirl = hasChildren
+    ? `<span class="twirl ${open ? "" : "closed"}" data-node="${escapeAttr(nodeId)}">▾</span>`
+    : `<span class="twirl leaf">·</span>`;
+  let cells = "";
+  for (const d of colDesc) {
+    const v = d.kind === "month"
+      ? node.cols[d.i]
+      : (node.wcols[d.i] ? (node.wcols[d.i][d.wk] || 0) : 0);
+    cells += cell(v, false, d.kind === "week");
+  }
+  return `<tr class="r-${kind}">
+    <td class="rowhead">${twirl}<span class="rowname" title="${escapeAttr(node.name)}">${escapeHtml(node.name)}</span></td>
+    ${cells}
+    <td class="gt">$${fmt(node.total)}</td></tr>`;
+}
+
+function cell(v, grand, isWeek) {
+  if (!v) return `<td class="${isWeek ? "wk" : ""}"><span class="z">·</span></td>`;
+  const cls = (grand ? "" : "pos") + (isWeek ? " wk" : "");
+  return `<td class="${cls.trim()}">${fmt(v)}</td>`;
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function escapeAttr(s){return escapeHtml(s).replace(/"/g,"&quot;");}
+
+document.getElementById("expandAll").addEventListener("click", () => {
+  for (const rep of state.data ? Pivot.buildPivot(Pivot.applyFilters(state.data.records, state.filters), {min:state.data.min_period,max:state.data.max_period}).reps : []) {
+    state.open.add(id(rep.name));
+    for (const cl of rep.clinics) state.open.add(id(rep.name, cl.name));
+  }
+  render();
+});
+document.getElementById("collapseAll").addEventListener("click", () => { state.open.clear(); render(); });
+document.getElementById("toggleWeeks").addEventListener("click", (e) => {
+  if (!state.data) return;
+  const months = [];
+  for (let p = state.data.min_period; p <= state.data.max_period; p++) months.push(p);
+  const allOpen = months.every((p) => state.expandedMonths.has(p));
+  state.expandedMonths.clear();
+  if (!allOpen) for (const p of months) state.expandedMonths.add(p);
+  e.target.textContent = allOpen ? "▦ Expand months → weeks" : "▦ Collapse weeks";
+  render();
+});
+document.getElementById("resetFilters").addEventListener("click", () => {
+  for (const d of DIMS) { state.filters[d.key].clear(); state.searches[d.key] = ""; }
+  buildControls(); render();
+});
+
+document.getElementById("exportWorkbook").addEventListener("click", exportWorkbook);
+
+function setupDropZone() {
+  const drop = document.getElementById("drop");
+  const input = document.getElementById("fileInput");
+  const head = document.getElementById("dropHead");
+  const sub = document.getElementById("dropSub");
+
+  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  ["dragenter", "dragover"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { stop(e); drop.classList.add("dragover"); })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { stop(e); drop.classList.remove("dragover"); })
+  );
+  drop.addEventListener("drop", (e) => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  input.addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleFile(f);
+  });
+
+  function handleFile(file) {
+    drop.classList.remove("ok", "err");
+    head.textContent = "Reading " + file.name + " …";
+    sub.textContent = "Unzipping and parsing in your browser…";
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const payload = await XlsxLite.read(ev.target.result, file.name);
+        applyPayload(payload);
+        drop.classList.add("ok");
+        head.textContent = "Loaded " + file.name;
+        sub.textContent = payload.records.length.toLocaleString() +
+          " order lines · " +
+          ((payload.period_labels && payload.period_labels[payload.min_period]) || "") + "–" +
+          ((payload.period_labels && payload.period_labels[payload.max_period]) || "") +
+          " · sheet '" + payload.sheet + "'. Drop another to replace.";
+      } catch (err) {
+        drop.classList.add("err");
+        head.textContent = "Could not read that file";
+        sub.textContent = (err && err.message) ? err.message : String(err);
+      }
+    };
+    reader.onerror = () => {
+      drop.classList.add("err");
+      head.textContent = "Could not read that file";
+      sub.textContent = "The browser failed to read the file.";
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+// Collapse records to one row per rep/clinic/drug/month/week, dropping any
+// derived fields (e.g. recency). Keeps the saved copy small and free of raw
+// line items while preserving Monday-week detail so months can still expand.
+function aggregatePayload(p) {
+  const map = new Map();
+  const key = (r) => r.rep + "\u0001" + r.clinic + "\u0001" + r.drug;
+  for (const r of p.records) {
+    const k = key(r);
+    let m = map.get(k);
+    if (!m) { m = { rep: r.rep, clinic: r.clinic, drug: r.drug, p: {} }; map.set(k, m); }
+    const ik = r.period + ":" + (r.wkstart | 0);
+    m.p[ik] = (m.p[ik] || 0) + r.subtotal;
+  }
+  const records = [];
+  for (const m of map.values())
+    for (const ik in m.p) {
+      const sp = ik.split(":");
+      records.push({ rep: m.rep, clinic: m.clinic, drug: m.drug,
+                     period: +sp[0], wkstart: +sp[1],
+                     subtotal: Math.round(m.p[ik] * 100) / 100 });
+    }
+  return { generated: p.generated, source: p.source,
+           min_period: p.min_period, max_period: p.max_period,
+           period_labels: p.period_labels, records };
+}
+
+// Export the current (filtered) pivot as CSV. level "drug" gives one row per
+// Rep/Clinic/Drug; level "clinic" sums across drugs for one row per Rep/Clinic.
+// Columns: a month each + Grand Total, plus a Grand Total row. Values match the
+// on-screen figures (whole dollars). Opens directly in Excel.
+function exportCsv(level) {
+  if (!state.data) { alert("No data is loaded yet."); return; }
+  const byClinic = level === "clinic";
+  const filtered = Pivot.applyFilters(state.data.records, state.filters);
+  const pivot = Pivot.buildPivot(filtered, {
+    min: state.data.min_period, max: state.data.max_period,
+  });
+  const labels = state.data.period_labels || {};
+  const months = [];
+  for (let p = pivot.min; p <= pivot.max; p++) months.push(p);
+
+  const esc = (s) => {
+    s = String(s);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const num = (v) => (v ? Math.round(v) : "");
+
+  const lines = [];
+  const head = byClinic ? ["Sales Rep", "Clinic"] : ["Sales Rep", "Clinic", "Drug"];
+  lines.push([...head, ...months.map((p) => labels[p] || p), "Grand Total"].map(esc).join(","));
+
+  for (const rep of pivot.reps) {
+    for (const clinic of rep.clinics) {
+      if (byClinic) {
+        const cells = [rep.name, clinic.name];
+        for (let i = 0; i < pivot.nCols; i++) cells.push(num(clinic.cols[i]));
+        cells.push(num(clinic.total));
+        lines.push(cells.map(esc).join(","));
+      } else {
+        for (const drug of clinic.drugs) {
+          const cells = [rep.name, clinic.name, drug.name];
+          for (let i = 0; i < pivot.nCols; i++) cells.push(num(drug.cols[i]));
+          cells.push(num(drug.total));
+          lines.push(cells.map(esc).join(","));
+        }
+      }
+    }
+  }
+
+  const gt = byClinic ? ["Grand Total", ""] : ["Grand Total", "", ""];
+  for (let i = 0; i < pivot.nCols; i++) gt.push(num(pivot.grandCols[i]));
+  gt.push(num(pivot.grandTotal));
+  lines.push(gt.map(esc).join(","));
+
+  // BOM so Excel reads UTF-8 (accented names) correctly; CRLF line endings.
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = byClinic ? "clinic-streak-by-clinic.csv" : "clinic-streak-by-drug.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ── Minimal XLSX writer (no dependencies) ────────────────────────────────
+// Builds a real .xlsx with one formatted Excel Table per sheet
+// (TableStyleMedium2 — blue banded rows), the accounting comma number format,
+// a bold Grand Total column, and a frozen header. Output is a stored ZIP.
+const XLSX_CRC = (function () {
+  let c, t = [];
+  for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t;
+})();
+function xlsxCrc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = XLSX_CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function xlsxEnc(s) { return new TextEncoder().encode(s); }
+function xlsxEscape(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function xlsxColL(n) { let s = ""; n++; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26 | 0; } return s; }
+function xlsxZip(files) {
+  const u16 = (v) => [v & 255, (v >> 8) & 255];
+  const u32 = (v) => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255];
+  const parts = [], central = []; let off = 0;
+  for (const f of files) {
+    const nb = xlsxEnc(f.name), d = f.data, crc = xlsxCrc32(d);
+    const lh = [0x50, 0x4b, 0x03, 0x04, ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(d.length), ...u32(d.length), ...u16(nb.length), ...u16(0)];
+    parts.push(new Uint8Array(lh), nb, d);
+    const ch = [0x50, 0x4b, 0x01, 0x02, ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(d.length), ...u32(d.length), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)];
+    central.push(new Uint8Array(ch), nb);
+    off += lh.length + nb.length + d.length;
+  }
+  let cdSize = 0; for (const c of central) cdSize += c.length;
+  const eocd = [0x50, 0x4b, 0x05, 0x06, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(off), ...u16(0)];
+  const all = [...parts, ...central, new Uint8Array(eocd)];
+  let tot = 0; for (const a of all) tot += a.length;
+  const out = new Uint8Array(tot); let p = 0; for (const a of all) { out.set(a, p); p += a.length; }
+  return out;
+}
+const XLSX_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="_(* #,##0_);_(* \\(#,##0\\);_(* &quot;-&quot;??_);_(@_)"/></numFmts>
+<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border/></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+function xlsxSheetXml(sheet) {
+  const H = sheet.headers, ncol = H.length;
+  const textCols = sheet.textCols || 2;
+  const widths = sheet.widths || (function () { const w = [22, 46]; for (let i = 2; i < ncol - 1; i++) w.push(10); w.push(13); return w; })();
+  let cols = "<cols>"; widths.forEach((w, i) => cols += `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`); cols += "</cols>";
+  let rows = `<row r="1">`;
+  H.forEach((h, i) => rows += `<c r="${xlsxColL(i)}1" t="inlineStr" s="0"><is><t xml:space="preserve">${xlsxEscape(h)}</t></is></c>`);
+  rows += "</row>";
+  sheet.rows.forEach((rec, ri) => {
+    const r = ri + 2; rows += `<row r="${r}">`;
+    rec.forEach((val, ci) => {
+      const ref = xlsxColL(ci) + r;
+      if (ci < textCols) { if (val != null && val !== "") rows += `<c r="${ref}" t="inlineStr" s="0"><is><t xml:space="preserve">${xlsxEscape(val)}</t></is></c>`; }
+      else { const isGrand = (ci === ncol - 1); if (val) rows += `<c r="${ref}" s="${isGrand ? 2 : 1}"><v>${val}</v></c>`; }
+    });
+    rows += "</row>";
+  });
+  const tp = sheet.rows.length >= 1 ? `<tableParts count="1"><tablePart r:id="rId1"/></tableParts>` : "";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/>${cols}<sheetData>${rows}</sheetData>${tp}</worksheet>`;
+}
+function xlsxTableXml(id, name, sheet) {
+  const H = sheet.headers, ncol = H.length, last = xlsxColL(ncol - 1), ref = `A1:${last}${1 + sheet.rows.length}`;
+  let cols = `<tableColumns count="${ncol}">`;
+  H.forEach((h, i) => cols += `<tableColumn id="${i + 1}" name="${xlsxEscape(h)}"/>`); cols += "</tableColumns>";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${name}" displayName="${name}" ref="${ref}" totalsRowShown="0"><autoFilter ref="${ref}"/>${cols}<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>`;
+}
+function xlsxBuild(sheets) {
+  const files = [];
+  const ct = [`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+    `<Default Extension="xml" ContentType="application/xml"/>`,
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>`,
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>`];
+  sheets.forEach((s, i) => ct.push(`<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`));
+  sheets.forEach((s, i) => { if (s.rows.length >= 1) ct.push(`<Override PartName="/xl/tables/table${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>`); });
+  ct.push(`</Types>`);
+  files.push({ name: "[Content_Types].xml", data: xlsxEnc(ct.join("")) });
+  files.push({ name: "_rels/.rels", data: xlsxEnc(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) });
+  let wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>`;
+  sheets.forEach((s, i) => wb += `<sheet name="${xlsxEscape(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`);
+  wb += `</sheets></workbook>`;
+  files.push({ name: "xl/workbook.xml", data: xlsxEnc(wb) });
+  let wr = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`;
+  sheets.forEach((s, i) => wr += `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`);
+  wr += `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  files.push({ name: "xl/_rels/workbook.xml.rels", data: xlsxEnc(wr) });
+  files.push({ name: "xl/styles.xml", data: xlsxEnc(XLSX_STYLES) });
+  sheets.forEach((s, i) => {
+    files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: xlsxEnc(xlsxSheetXml(s)) });
+    if (s.rows.length >= 1) {
+      files.push({ name: `xl/worksheets/_rels/sheet${i + 1}.xml.rels`, data: xlsxEnc(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table${i + 1}.xml"/></Relationships>`) });
+      files.push({ name: `xl/tables/table${i + 1}.xml`, data: xlsxEnc(xlsxTableXml(i + 1, "Tbl" + (i + 1), s)) });
+    }
+  });
+  return xlsxZip(files);
+}
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function monthShort(p) { return MONTH_ABBR[p % 12] + "-" + String(Math.floor(p / 12) % 100).padStart(2, "0"); }
+
+// Build a single-sheet Excel export: one row per clinic with a "MoM Category"
+// column (the seven month-over-month buckets for clinics that ordered this
+// month, plus 1 Mo / 2 Mo / 3+ Mo for clinics inactive that long). Respects
+// rep/clinic/drug filters but not the MoM/recency filters (the column shows
+// every category). Formatted as one Excel Table; one row per clinic.
+const MOM_CAT_ORDER = ["New", "Up 50%+", "Up 25–49%", "Up 1–24%", "Down 0–24%", "Down 25–49%", "Down 50%+", "1 Mo", "2+ Mo"];
+const MOM_TO_CAT = {
+  "New (last 30d)": "New", "Up 50%+": "Up 50%+", "Up 25–49%": "Up 25–49%", "Up 1–24%": "Up 1–24%",
+  "Down 0–24%": "Down 0–24%", "Down 25–49%": "Down 25–49%", "Down 50%+": "Down 50%+",
+};
+function clinicCategory(mom, recency) {
+  if (recency === "0 (ordered this month)") return MOM_TO_CAT[mom] || "1 Mo";
+  if (recency === "1 Month") return "1 Mo";
+  return "2+ Mo"; // last ordered more than a month ago
+}
+
+function exportWorkbook() {
+  if (!state.data) { alert("No data is loaded yet."); return; }
+  const base = Pivot.applyFilters(state.data.records, {
+    reps: state.filters.reps, clinics: state.filters.clinics, drugs: state.filters.drugs,
+    source: state.filters.source, am: state.filters.am,
+  });
+  const min = state.data.min_period, max = state.data.max_period;
+  const months = []; for (let p = min; p <= max; p++) months.push(p);
+
+  // Category per clinic (mom/recency are tagged per clinic, identical across its records).
+  const catByClinic = new Map();
+  for (const r of base) {
+    const k = r.rep + "\u0001" + r.clinic;
+    if (!catByClinic.has(k)) catByClinic.set(k, clinicCategory(r.mom, r.recency));
+  }
+
+  const pv = Pivot.buildPivot(base, { min, max });
+  const data = [];
+  for (const rep of pv.reps) for (const c of rep.clinics) {
+    const cat = catByClinic.get(rep.name + "\u0001" + c.name) || "2+ Mo";
+    const monthVals = []; let g = 0;
+    for (let i = 0; i < pv.nCols; i++) { const v = Math.round(c.cols[i]); g += v; monthVals.push(v || ""); }
+    data.push({ rep: rep.name, clinic: c.name, cat, monthVals, g });
+  }
+  // Group by category (canonical order), then by sales descending within each.
+  data.sort((a, b) => (MOM_CAT_ORDER.indexOf(a.cat) - MOM_CAT_ORDER.indexOf(b.cat)) || (b.g - a.g));
+
+  const headers = ["Sales Rep", "Clinic", "MoM Category", ...months.map(monthShort), "Grand Total"];
+  const widths = [20, 38, 15, ...months.map(() => 9.5), 13];
+  const rows = data.map((r) => [r.rep, r.clinic, r.cat, ...r.monthVals, r.g]);
+  const sheet = { name: "MoM by Clinic", headers, rows, textCols: 3, widths };
+
+  const bytes = xlsxBuild([sheet]);
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "clinic-streak-MoM-by-clinic.xlsx";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Rebuild this page as a self-contained file with the current data embedded,
+// then download it. Recipients open it prepopulated — no install, no internet.
+function downloadCopy() {
+  if (!state.data) { alert("No data is loaded yet. Drop a Metabase .xlsx first."); return; }
+  let json = JSON.stringify(aggregatePayload(state.data));
+  // Every "<" here is inside a string value; escaping it keeps the JSON valid
+  // and makes it impossible to accidentally end the embedded data block early.
+  json = json.replace(/</g, "\\u003c");
+
+  const doc = document.documentElement.cloneNode(true);
+  const el = doc.querySelector("#embedded-data");
+  el.textContent = json;
+  // Clear transient view state; init() rebuilds it from the embedded data.
+  const c = doc.querySelector("#controls"); if (c) c.innerHTML = "";
+  const t = doc.querySelector("#table"); if (t) { t.innerHTML = ""; t.setAttribute("hidden", ""); }
+  const l = doc.querySelector("#loading"); if (l) { l.className = "loading"; l.textContent = "Loading data…"; }
+
+  const html = "<!doctype html>\n" + doc.outerHTML;
+  const blob = new Blob([html], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "clinic-streak-shared.html";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+</script>
+<script>
+/* ===== Supabase auth + data (login gate + role-filtered fetch) ===== */
+const SUPABASE_URL = "https://ncboamkusxbowvqbhjgs.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_uQc-cz3bnHr45KQWRPo3uA_zzzu8J0D";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const _gate = document.getElementById("login-gate");
+const _app = document.getElementById("app");
+const _MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function _showLogin(msg){ _gate.style.display="grid"; _app.style.display="none"; if(msg) document.getElementById("lg-err").textContent=msg; }
+function _showApp(){ _gate.style.display="none"; _app.style.display="block"; _addSignout(); }
+function _addSignout(){
+  if(document.getElementById("lg-out")) return;
+  const m=document.getElementById("meta"); if(!m) return;
+  m.insertAdjacentHTML("afterend",'<button id="lg-out" class="signout" style="margin-top:8px">Sign out</button>');
+  document.getElementById("lg-out").addEventListener("click", async ()=>{ await sb.auth.signOut(); location.reload(); });
+}
+
+function _recFromRow(r){
+  const iso=String(r.order_date).slice(0,10);
+  const y=+iso.slice(0,4), mo=+iso.slice(5,7), dd=+iso.slice(8,10);
+  const period=y*12+(mo-1);
+  const t=Date.UTC(y,mo-1,dd), dow=new Date(t).getUTCDay();
+  const wkstart=Math.floor(t/86400000)-(dow===0?6:dow-1);
+  let sub=r.subtotal; sub=(typeof sub==="number"&&isFinite(sub))?sub:(sub==null||isNaN(parseFloat(sub))?0:parseFloat(sub));
+  const src=(r.source!=null&&String(r.source).trim())?String(r.source).trim():"(no source)";
+  return { rep:r.sales_rep||"(no rep)", clinic:r.clinic_name||"(no clinic)", drug:r.drug_name||"(no drug)",
+           period, wkstart, subtotal:sub, status:r.status||"", source:src, date:iso };
+}
+function _payloadFromRows(rows){
+  const records=[]; let minP=null,maxP=null;
+  for(const r of rows){ if(r.order_date==null) continue; const rec=_recFromRow(r); records.push(rec);
+    if(minP===null||rec.period<minP)minP=rec.period; if(maxP===null||rec.period>maxP)maxP=rec.period; }
+  const labels={}; if(minP!==null) for(let p=minP;p<=maxP;p++) labels[p]=_MON[((p%12)+12)%12]+" "+Math.floor(p/12);
+  return { generated:new Date().toISOString(), source:"Supabase", sheet:"orders", min_period:minP, max_period:maxP, period_labels:labels, records };
+}
+async function _fetchAllOrders(){
+  const withSrc = "order_date,sales_rep,clinic_name,drug_name,subtotal,source";
+  const noSrc   = "order_date,sales_rep,clinic_name,drug_name,subtotal";
+  let cols = withSrc;
+  const size=1000; let from=0; const all=[];
+  for(;;){
+    const { data, error } = await sb.from("orders").select(cols).range(from, from+size-1);
+    if(error){
+      // If the table has no "source" column, retry the whole fetch without it.
+      if(cols===withSrc){ cols=noSrc; from=0; all.length=0; continue; }
+      throw error;
+    }
+    all.push(...data);
+    if(data.length<size) break;
+    from+=size;
+  }
+  return all;
+}
+async function _loadFromSupabase(){
+  try{
+    const payload=_payloadFromRows(await _fetchAllOrders());
+    if(!payload.records.length){
+      document.getElementById("meta").innerHTML="no data visible to this account";
+      const l=document.getElementById("loading"); if(l){ l.className="empty"; l.textContent="No data is visible to this account."; }
+      return;
+    }
+    applyPayload(payload);
+  }catch(err){ console.error(err); _showLogin("Couldn't load data: "+(err.message||err)); }
+}
+async function _doLogin(){
+  const email=document.getElementById("lg-email").value.trim();
+  const pw=document.getElementById("lg-pw").value;
+  const btn=document.getElementById("lg-btn"), err=document.getElementById("lg-err");
+  err.textContent=""; btn.disabled=true; btn.textContent="Signing in…";
+  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+  btn.disabled=false; btn.textContent="Sign in";
+  if(error){ err.textContent=error.message; return; }
+  _showApp(); await _loadFromSupabase();
+}
+document.getElementById("lg-btn").addEventListener("click", _doLogin);
+document.getElementById("lg-pw").addEventListener("keydown", e=>{ if(e.key==="Enter") _doLogin(); });
+async function _boot(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ _showApp(); await _loadFromSupabase(); }
+  else { _showLogin(); }
+}
+_boot();
+</script>
+</body>
+</html>
