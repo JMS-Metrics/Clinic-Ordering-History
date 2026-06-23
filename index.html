@@ -1500,27 +1500,37 @@ function exportWorkbook() {
   const months = []; for (let p = min; p <= max; p++) months.push(p);
 
   // Category per clinic (mom/recency are tagged per clinic, identical across its records).
+  // Also capture each clinic's account manager and the source(s) it ordered through.
   const catByClinic = new Map();
+  const amByClinic = new Map();
+  const srcByClinic = new Map();
   for (const r of base) {
     const k = r.rep + "\u0001" + r.clinic;
     if (!catByClinic.has(k)) catByClinic.set(k, clinicCategory(r.mom, r.recency));
+    if (!amByClinic.has(k)) amByClinic.set(k, r.accountManager || "(unassigned)");
+    let s = srcByClinic.get(k); if (!s) { s = new Set(); srcByClinic.set(k, s); }
+    s.add(r.source || "(no source)");
   }
 
   const pv = Pivot.buildPivot(base, { min, max });
   const data = [];
   for (const rep of pv.reps) for (const c of rep.clinics) {
-    const cat = catByClinic.get(rep.name + "\u0001" + c.name) || "2+ Mo";
+    const key = rep.name + "\u0001" + c.name;
+    const cat = catByClinic.get(key) || "2+ Mo";
+    const am = amByClinic.get(key) || "(unassigned)";
+    const srcs = [...(srcByClinic.get(key) || [])].sort();   // a clinic may use more than one
+    const source = srcs.join(", ");
     const monthVals = []; let g = 0;
     for (let i = 0; i < pv.nCols; i++) { const v = Math.round(c.cols[i]); g += v; monthVals.push(v || ""); }
-    data.push({ rep: rep.name, clinic: c.name, cat, monthVals, g });
+    data.push({ source, am, rep: rep.name, clinic: c.name, cat, monthVals, g });
   }
   // Group by category (canonical order), then by sales descending within each.
   data.sort((a, b) => (MOM_CAT_ORDER.indexOf(a.cat) - MOM_CAT_ORDER.indexOf(b.cat)) || (b.g - a.g));
 
-  const headers = ["Sales Rep", "Clinic", "MoM Category", ...months.map(monthShort), "Grand Total"];
-  const widths = [20, 38, 15, ...months.map(() => 9.5), 13];
-  const rows = data.map((r) => [r.rep, r.clinic, r.cat, ...r.monthVals, r.g]);
-  const sheet = { name: "MoM by Clinic", headers, rows, textCols: 3, widths };
+  const headers = ["Source", "Account Manager", "Sales Rep", "Clinic", "MoM Category", ...months.map(monthShort), "Grand Total"];
+  const widths = [13, 22, 20, 38, 15, ...months.map(() => 9.5), 13];
+  const rows = data.map((r) => [r.source, r.am, r.rep, r.clinic, r.cat, ...r.monthVals, r.g]);
+  const sheet = { name: "MoM by Clinic", headers, rows, textCols: 5, widths };
 
   const bytes = xlsxBuild([sheet]);
   const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
