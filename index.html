@@ -48,11 +48,11 @@
   .meta { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.6; }
   .meta b { color: var(--ink); font-weight: 600; }
 
-  .controls { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin: 22px 0 18px; }
+  .controls { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin: 22px 0 18px; }
 
   .filter {
     background: var(--panel); border: 1px solid var(--line);
-    border-radius: 12px; padding: 12px 13px 13px; box-shadow: var(--shadow);
+    border-radius: 12px; padding: 10px 10px 11px; box-shadow: var(--shadow);
     display: flex; flex-direction: column; min-height: 0; min-width: 0;
   }
   .filter .lbl { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
@@ -89,8 +89,8 @@
   .toolbar .summary b { color: var(--ink); }
 
   /* Pie/donut charts */
-  .charts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; margin: 0 0 20px; }
-  .chart-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 12px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 0; }
+  .charts { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin: 0 0 20px; }
+  .chart-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 10px 10px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 0; }
   .chart-card .ttl { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
   .chart-card .cap { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--muted); margin-top: 3px; }
   .chart-card .pie { display: block; width: 100%; max-width: 130px; height: auto; aspect-ratio: 1 / 1; margin: 12px auto 10px; }
@@ -267,7 +267,8 @@
       if (has(f.am) && !f.am.has(r.accountManager)) return false;
       if (has(f.clinics) && !f.clinics.has(r.clinic)) return false;
       if (has(f.drugs) && !f.drugs.has(r.drug)) return false;
-      if (has(f.source) && !f.source.has(r.source)) return false;
+      if (has(f.tenant) && !f.tenant.has(r.tenant)) return false;
+      if (has(f.pharmacy) && !f.pharmacy.has(r.pharmacy_id)) return false;
       if (has(f.recency) && !f.recency.has(r.recency)) return false;
       if (has(f.mom) && !f.mom.has(r.mom)) return false;
       return true;
@@ -707,6 +708,7 @@
     var cellRe = /<c\b([^>]*)(?:\/>|>([\s\S]*?)<\/c>)/g;
 
     var colIndex = null; // header-name -> 0-based column index
+    var colIndexLC = {};  // lowercased header-name -> 0-based column index
     var records = [], minP = null, maxP = null;
     var firstRow = true;
 
@@ -727,9 +729,13 @@
       if (firstRow) {
         firstRow = false;
         colIndex = {};
+        colIndexLC = {};
         Object.keys(cells).forEach(function (ci) {
           var name = cells[ci];
-          if (typeof name === "string") colIndex[name.trim()] = +ci;
+          if (typeof name === "string") {
+            colIndex[name.trim()] = +ci;
+            colIndexLC[name.trim().toLowerCase()] = +ci;
+          }
         });
         var missing = NEEDED.filter(function (n) {
           return n !== "status" && !(n in colIndex);
@@ -755,8 +761,12 @@
       sub = (typeof sub === "number" && isFinite(sub)) ? sub :
             (sub == null || isNaN(parseFloat(sub)) ? 0 : parseFloat(sub));
 
-      var statusCol = ("status" in colIndex) ? cells[colIndex.status] : "";
-      var sourceCol = ("source" in colIndex) ? cells[colIndex.source] : "";
+      var getC = function (n) { var i = colIndexLC[n]; return (i == null) ? undefined : cells[i]; };
+      var statusCol = getC("status");
+      // "tenant" replaces the old "source" column (BoomRx / Bulk); fall back to a
+      // legacy "Source" header so raw Metabase exports still populate it.
+      var tenantRaw = (colIndexLC.tenant != null) ? getC("tenant") : getC("source");
+      var pharmRaw = getC("pharmacy_id");
 
       records.push({
         rep: cells[colIndex.sales_rep] || "(no rep)",
@@ -766,7 +776,8 @@
         wkstart: wkstart,
         subtotal: sub,
         status: statusCol || "",
-        source: (sourceCol && String(sourceCol).trim()) || "(no source)",
+        tenant: (tenantRaw && String(tenantRaw).trim()) || "(no tenant)",
+        pharmacy_id: (pharmRaw && String(pharmRaw).trim()) || "(no pharmacy)",
         date: iso,
       });
       if (minP === null || period < minP) minP = period;
@@ -813,7 +824,8 @@ window.ACCOUNT_MANAGERS = {"atlantawellnessclinic":"Ashlyn Smith","shormedical":
 </script>
 <script>
 const DIMS = [
-  { key: "source",  field: "source", label: "Source" },
+  { key: "tenant",   field: "tenant", label: "Tenant" },
+  { key: "pharmacy", field: "pharmacy_id", label: "Pharmacy" },
   { key: "am",      field: "accountManager", label: "Account Manager" },
   { key: "reps",    field: "rep",    label: "Sales Rep" },
   { key: "clinics", field: "clinic", label: "Clinic Name" },
@@ -826,10 +838,10 @@ const DIMS = [
 
 const state = {
   data: null,
-  filters: { reps: new Set(), am: new Set(), clinics: new Set(), drugs: new Set(), source: new Set(), recency: new Set(), mom: new Set() },
+  filters: { tenant: new Set(), pharmacy: new Set(), reps: new Set(), am: new Set(), clinics: new Set(), drugs: new Set(), recency: new Set(), mom: new Set() },
   open: new Set(),        // node ids that are expanded
   expandedMonths: new Set(), // month periods expanded into weeks
-  searches: { reps: "", am: "", clinics: "", drugs: "", source: "", recency: "", mom: "" },
+  searches: { tenant: "", pharmacy: "", reps: "", am: "", clinics: "", drugs: "", recency: "", mom: "" },
 };
 
 const fmt = (n) => n ? Math.round(n).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "";
@@ -883,7 +895,13 @@ function applyPayload(payload) {
   // they never appear in the pivot, filters, charts, or any export.
   payload.records = payload.records.filter((r) => {
     const c = (r.clinic || "").replace(/[()]/g, "").trim().toLowerCase();
-    return c && c !== "no clinic";
+    if (!c || c === "no clinic") return false;
+    // Exclude cancelled orders (any status containing "cancel", case-insensitive)
+    // so they never appear in the pivot, filters, charts, or exports — no need to
+    // strip them from the Metabase file before importing to Supabase.
+    const st = (r.status || "").trim().toLowerCase();
+    if (st.includes("cancel")) return false;
+    return true;
   });
   // Tag each record with its account manager, joined from the embedded CRM
   // lookup by clinic name. Clinics not present in the CRM become "(unassigned)".
@@ -891,7 +909,8 @@ function applyPayload(payload) {
   const _amKey = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
   for (const r of payload.records) {
     r.accountManager = _AM[_amKey(r.clinic)] || "(unassigned)";
-    if (r.source == null || r.source === "") r.source = "(no source)";
+    if (r.tenant == null || r.tenant === "") r.tenant = "(no tenant)";
+    if (r.pharmacy_id == null || r.pharmacy_id === "") r.pharmacy_id = "(no pharmacy)";
   }
   state.data = payload;
   // Ensure every record has a week bucket (derived from date for raw data).
@@ -1084,7 +1103,7 @@ const PIE_COLORS = ["#b4451f", "#355e3b", "#8a7a55", "#5a4a2f", "#c98a1f",
                     "#4a6670", "#7a4a52", "#6f7a55", "#2a2620"];
 const PIE_OTHER = "#c4bca8";
 const PIE_TOP_N = 9;
-const PIE_NOUN = { reps: "sales reps", clinics: "clinics", drugs: "drugs", recency: "buckets", mom: "ranges" };
+const PIE_NOUN = { tenant: "tenants", pharmacy: "pharmacies", reps: "sales reps", clinics: "clinics", drugs: "drugs", recency: "buckets", mom: "ranges" };
 
 function chartSlices(dim, records) {
   const m = new Map();
@@ -1494,7 +1513,7 @@ function exportWorkbook() {
   if (!state.data) { alert("No data is loaded yet."); return; }
   const base = Pivot.applyFilters(state.data.records, {
     reps: state.filters.reps, clinics: state.filters.clinics, drugs: state.filters.drugs,
-    source: state.filters.source, am: state.filters.am,
+    tenant: state.filters.tenant, pharmacy: state.filters.pharmacy, am: state.filters.am,
   });
   const min = state.data.min_period, max = state.data.max_period;
   const months = []; for (let p = min; p <= max; p++) months.push(p);
@@ -1503,13 +1522,16 @@ function exportWorkbook() {
   // Also capture each clinic's account manager and the source(s) it ordered through.
   const catByClinic = new Map();
   const amByClinic = new Map();
-  const srcByClinic = new Map();
+  const tenByClinic = new Map();
+  const phByClinic = new Map();
   for (const r of base) {
     const k = r.rep + "\u0001" + r.clinic;
     if (!catByClinic.has(k)) catByClinic.set(k, clinicCategory(r.mom, r.recency));
     if (!amByClinic.has(k)) amByClinic.set(k, r.accountManager || "(unassigned)");
-    let s = srcByClinic.get(k); if (!s) { s = new Set(); srcByClinic.set(k, s); }
-    s.add(r.source || "(no source)");
+    let t = tenByClinic.get(k); if (!t) { t = new Set(); tenByClinic.set(k, t); }
+    t.add(r.tenant || "(no tenant)");
+    let p = phByClinic.get(k); if (!p) { p = new Set(); phByClinic.set(k, p); }
+    p.add(r.pharmacy_id || "(no pharmacy)");
   }
 
   const pv = Pivot.buildPivot(base, { min, max });
@@ -1518,19 +1540,19 @@ function exportWorkbook() {
     const key = rep.name + "\u0001" + c.name;
     const cat = catByClinic.get(key) || "2+ Mo";
     const am = amByClinic.get(key) || "(unassigned)";
-    const srcs = [...(srcByClinic.get(key) || [])].sort();   // a clinic may use more than one
-    const source = srcs.join(", ");
+    const tenant = [...(tenByClinic.get(key) || [])].sort().join(", ");    // a clinic may use more than one
+    const pharmacy = [...(phByClinic.get(key) || [])].sort().join(", ");
     const monthVals = []; let g = 0;
     for (let i = 0; i < pv.nCols; i++) { const v = Math.round(c.cols[i]); g += v; monthVals.push(v || ""); }
-    data.push({ source, am, rep: rep.name, clinic: c.name, cat, monthVals, g });
+    data.push({ tenant, pharmacy, am, rep: rep.name, clinic: c.name, cat, monthVals, g });
   }
   // Group by category (canonical order), then by sales descending within each.
   data.sort((a, b) => (MOM_CAT_ORDER.indexOf(a.cat) - MOM_CAT_ORDER.indexOf(b.cat)) || (b.g - a.g));
 
-  const headers = ["Source", "Account Manager", "Sales Rep", "Clinic", "MoM Category", ...months.map(monthShort), "Grand Total"];
-  const widths = [13, 22, 20, 38, 15, ...months.map(() => 9.5), 13];
-  const rows = data.map((r) => [r.source, r.am, r.rep, r.clinic, r.cat, ...r.monthVals, r.g]);
-  const sheet = { name: "MoM by Clinic", headers, rows, textCols: 5, widths };
+  const headers = ["Tenant", "Pharmacy", "Account Manager", "Sales Rep", "Clinic", "MoM Category", ...months.map(monthShort), "Grand Total"];
+  const widths = [13, 16, 22, 20, 38, 15, ...months.map(() => 9.5), 13];
+  const rows = data.map((r) => [r.tenant, r.pharmacy, r.am, r.rep, r.clinic, r.cat, ...r.monthVals, r.g]);
+  const sheet = { name: "MoM by Clinic", headers, rows, textCols: 6, widths };
 
   const bytes = xlsxBuild([sheet]);
   const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
@@ -1593,9 +1615,10 @@ function _recFromRow(r){
   const t=Date.UTC(y,mo-1,dd), dow=new Date(t).getUTCDay();
   const wkstart=Math.floor(t/86400000)-(dow===0?6:dow-1);
   let sub=r.subtotal; sub=(typeof sub==="number"&&isFinite(sub))?sub:(sub==null||isNaN(parseFloat(sub))?0:parseFloat(sub));
-  const src=(r.source!=null&&String(r.source).trim())?String(r.source).trim():"(no source)";
+  const tenant=(r.tenant!=null&&String(r.tenant).trim())?String(r.tenant).trim():"(no tenant)";
+  const pharm=(r.pharmacy_id!=null&&String(r.pharmacy_id).trim())?String(r.pharmacy_id).trim():"(no pharmacy)";
   return { rep:r.sales_rep||"(no rep)", clinic:r.clinic_name||"(no clinic)", drug:r.drug_name||"(no drug)",
-           period, wkstart, subtotal:sub, status:r.status||"", source:src, date:iso };
+           period, wkstart, subtotal:sub, status:r.status||"", tenant, pharmacy_id:pharm, date:iso };
 }
 function _payloadFromRows(rows){
   const records=[]; let minP=null,maxP=null;
@@ -1605,15 +1628,23 @@ function _payloadFromRows(rows){
   return { generated:new Date().toISOString(), source:"Supabase", sheet:"orders", min_period:minP, max_period:maxP, period_labels:labels, records };
 }
 async function _fetchAllOrders(){
-  const withSrc = "order_date,sales_rep,clinic_name,drug_name,subtotal,source";
-  const noSrc   = "order_date,sales_rep,clinic_name,drug_name,subtotal";
-  let cols = withSrc;
+  // Try the richest column set first and degrade if a column isn't in the table
+  // yet (e.g. before "status" or "source" has been added). A missing column makes
+  // the whole select fail, so we fall back to the next set and restart the fetch.
+  const CANDIDATES = [
+    "order_date,sales_rep,clinic_name,drug_name,subtotal,tenant,pharmacy_id,status",
+    "order_date,sales_rep,clinic_name,drug_name,subtotal,tenant,pharmacy_id",
+    "order_date,sales_rep,clinic_name,drug_name,subtotal,tenant,status",
+    "order_date,sales_rep,clinic_name,drug_name,subtotal,tenant",
+    "order_date,sales_rep,clinic_name,drug_name,subtotal,status",
+    "order_date,sales_rep,clinic_name,drug_name,subtotal",
+  ];
+  let ci=0, cols=CANDIDATES[ci];
   const size=1000; let from=0; const all=[];
   for(;;){
     const { data, error } = await sb.from("orders").select(cols).range(from, from+size-1);
     if(error){
-      // If the table has no "source" column, retry the whole fetch without it.
-      if(cols===withSrc){ cols=noSrc; from=0; all.length=0; continue; }
+      if(ci<CANDIDATES.length-1){ ci++; cols=CANDIDATES[ci]; from=0; all.length=0; continue; }
       throw error;
     }
     all.push(...data);
