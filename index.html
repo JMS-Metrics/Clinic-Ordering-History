@@ -1597,7 +1597,7 @@ function _addSignout(){
   if(document.getElementById("lg-out")) return;
   const m=document.getElementById("meta"); if(!m) return;
   m.insertAdjacentHTML("afterend",'<button id="lg-out" class="signout" style="margin-top:8px">Sign out</button>');
-  document.getElementById("lg-out").addEventListener("click", async ()=>{ await sb.auth.signOut(); location.reload(); });
+  document.getElementById("lg-out").addEventListener("click", async ()=>{ await _cacheClear(); await sb.auth.signOut(); location.reload(); });
 }
 
 function _recFromRow(r){
@@ -1618,40 +1618,101 @@ function _payloadFromRows(rows){
   const labels={}; if(minP!==null) for(let p=minP;p<=maxP;p++) labels[p]=_MON[((p%12)+12)%12]+" "+Math.floor(p/12);
   return { generated:new Date().toISOString(), source:"Supabase", sheet:"orders", min_period:minP, max_period:maxP, period_labels:labels, records };
 }
+// ---- offline cache (IndexedDB) so repeat loads paint instantly ----
+const _CACHE_VER = 1;
+function _idbOpen(){ return new Promise((res,rej)=>{ let r; try{ r=indexedDB.open("clinicstreak",1); }catch(e){ return rej(e); }
+  r.onupgradeneeded=()=>{ try{ r.result.createObjectStore("kv"); }catch(e){} };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function _cacheGet(k){ try{ const db=await _idbOpen(); return await new Promise((res,rej)=>{ const t=db.transaction("kv").objectStore("kv").get(k); t.onsuccess=()=>res(t.result); t.onerror=()=>rej(t.error); }); }catch(e){ return null; } }
+async function _cacheSet(k,v){ try{ const db=await _idbOpen(); await new Promise((res,rej)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }catch(e){} }
+async function _cacheClear(){ try{ const db=await _idbOpen(); await new Promise((res)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").clear(); tx.oncomplete=()=>res(); tx.onerror=()=>res(); }); }catch(e){} }
+
 async function _fetchAllOrders(){
-  // Try the richest column set first and degrade if a column isn't in the table
-  // yet (e.g. before "status" or "source" has been added). A missing column makes
-  // the whole select fail, so we fall back to the next set and restart the fetch.
+  // Pick the column set that exists (older tables may lack status/pharmacy_id),
+  // grab page 0, and learn the total row count in ONE request — then pull every
+  // remaining page in parallel instead of one-after-another.
   const CANDIDATES = [
     "order_date,sales_rep,clinic_name,drug_name,subtotal,pharmacy_id,status",
     "order_date,sales_rep,clinic_name,drug_name,subtotal,pharmacy_id",
     "order_date,sales_rep,clinic_name,drug_name,subtotal,status",
     "order_date,sales_rep,clinic_name,drug_name,subtotal",
   ];
-  let ci=0, cols=CANDIDATES[ci];
-  const size=1000; let from=0; const all=[];
-  for(;;){
-    const { data, error } = await sb.from("orders").select(cols).range(from, from+size-1);
-    if(error){
-      if(ci<CANDIDATES.length-1){ ci++; cols=CANDIDATES[ci]; from=0; all.length=0; continue; }
-      throw error;
+  const size=1000;
+  let cols=null, first=null, total=null, lastErr=null;
+  for(let ci=0; ci<CANDIDATES.length; ci++){
+    const { data, error, count } = await sb.from("orders")
+      .select(CANDIDATES[ci], { count:"exact" }).range(0, size-1);
+    if(!error){ cols=CANDIDATES[ci]; first=data; total=count; break; }
+    lastErr=error;
+  }
+  if(first===null) throw (lastErr || new Error("could not read orders"));
+  const all=first.slice();
+  if(total!=null && total>size){
+    const reqs=[];
+    for(let frm=size; frm<total; frm+=size){
+      reqs.push(sb.from("orders").select(cols).range(frm, frm+size-1)
+        .then(r=>{ if(r.error) throw r.error; return r.data; }));
     }
-    all.push(...data);
-    if(data.length<size) break;
-    from+=size;
+    const pages=await Promise.all(reqs);
+    for(const pg of pages) all.push(...pg);
+  } else if(total==null){
+    // Count unavailable — fall back to sequential paging.
+    let from=size;
+    for(;;){
+      const { data, error } = await sb.from("orders").select(cols).range(from, from+size-1);
+      if(error) throw error;
+      all.push(...data);
+      if(data.length<size) break;
+      from+=size;
+    }
   }
   return all;
 }
 async function _loadFromSupabase(){
+  // Cache is keyed per signed-in user (row visibility can differ by account).
+  let uid="anon";
+  try{ const { data:{ session } } = await sb.auth.getSession(); if(session&&session.user) uid=session.user.id; }catch(e){}
+  const key="orders:"+_CACHE_VER+":"+uid;
+  const sigOf=rows=>rows.length+":"+Math.round(rows.reduce((a,r)=>a+(+r.subtotal||0),0));
+
+  // 1) Paint instantly from cache if we have one.
+  let shownFromCache=false, cachedSig=null;
   try{
-    const payload=_payloadFromRows(await _fetchAllOrders());
+    const cached=await _cacheGet(key);
+    if(cached && cached.rows && cached.rows.length){
+      cachedSig=cached.sig||sigOf(cached.rows);
+      const payload=_payloadFromRows(cached.rows);
+      if(payload.records.length){
+        applyPayload(payload); shownFromCache=true;
+        const m=document.getElementById("meta");
+        if(m) m.insertAdjacentHTML("beforeend",'<br><span id="_refreshing" style="color:var(--muted)">refreshing…</span>');
+      }
+    }
+  }catch(e){}
+
+  // 2) Pull fresh data, then update the view + cache.
+  try{
+    const rows=await _fetchAllOrders();
+    const payload=_payloadFromRows(rows);
     if(!payload.records.length){
-      document.getElementById("meta").innerHTML="no data visible to this account";
-      const l=document.getElementById("loading"); if(l){ l.className="empty"; l.textContent="No data is visible to this account."; }
+      if(!shownFromCache){
+        document.getElementById("meta").innerHTML="no data visible to this account";
+        const l=document.getElementById("loading"); if(l){ l.className="empty"; l.textContent="No data is visible to this account."; }
+      }
       return;
     }
-    applyPayload(payload);
-  }catch(err){ console.error(err); _showLogin("Couldn't load data: "+(err.message||err)); }
+    // Re-render only when the data actually changed — keeps any filters you set
+    // while the cached copy was on screen.
+    const freshSig=sigOf(rows);
+    if(!shownFromCache || freshSig!==cachedSig) applyPayload(payload);
+    else { const r=document.getElementById("_refreshing"); if(r) r.remove(); }
+    _cacheSet(key,{rows:rows, ts:Date.now(), sig:freshSig});
+  }catch(err){
+    console.error(err);
+    const r=document.getElementById("_refreshing");
+    if(r) r.textContent="(couldn't refresh — showing saved copy)";
+    if(!shownFromCache) _showLogin("Couldn't load data: "+(err.message||err));
+  }
 }
 async function _doLogin(){
   const email=document.getElementById("lg-email").value.trim();
